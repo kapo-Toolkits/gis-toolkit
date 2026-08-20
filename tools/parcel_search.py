@@ -46,9 +46,10 @@ PTR = {
     "btn_clear":     {"en": "Clear", "ka": "გასუფთავება"},
     "sec_out":       {"en": "3. Output file (.shp and .gpkg both created)",
                       "ka": "3. შედეგის ფაილი (შეიქმნება .shp და .gpkg ორივე)"},
-    "btn_search":    {"en": "🔍  Search and create Shapefile",
-                      "ka": "🔍  ძებნა და Shapefile-ის შექმნა"},
+    "btn_search":    {"en": "🔍  Search", "ka": "🔍  ძებნა"},
     "btn_search_busy": {"en": "Working…", "ka": "მიმდინარეობს…"},
+    "chk_create_shp": {"en": "💾 Also create shapefile (.shp + .gpkg)",
+                       "ka": "💾 შეიპფაილის შექმნაც (.shp + .gpkg)"},
     "sec_result":    {"en": "4. Result", "ka": "4. შედეგი"},
     "btn_save_nf":   {"en": "Save not-found codes (.txt)",
                       "ka": "ვერ ნაპოვნი კოდების შენახვა (.txt)"},
@@ -98,6 +99,10 @@ PTR = {
     "rs_writing":    {"en": "Writing {n} features…", "ka": "ვწერ {n} ობიექტს…"},
     "rs_none":       {"en": "No codes found — no files created.",
                       "ka": "ვერცერთი კოდი ვერ მოიძებნა — ფაილები არ შეიქმნა."},
+    "rs_search_only":{"en": "Search only — {n} features matched, files not created.",
+                      "ka": "მხოლოდ ძებნა — {n} ობიექტი დაემთხვა, ფაილები არ შექმნილა."},
+    "sum_search_only": {"en": "Search only — no files created.",
+                        "ka": "მხოლოდ ძებნა — ფაილები არ შექმნილა."},
     "rs_empty_list": {"en": "Empty list — no codes could be read.",
                       "ka": "ცარიელი სია — ვერცერთი კოდი ვერ წავიკითხე."},
 
@@ -195,11 +200,12 @@ def parse_manual_codes(text):
 # ---------------------------------------------------------------------------
 # ძებნის ლოგიკა (მუშაობს ცალკე thread-ში) — tr აპლიკაციის მიმდინარე ენას იყენებს
 # ---------------------------------------------------------------------------
-def run_search(gdb, layer, field, codes, out_path, log, done, tr):
+def run_search(gdb, layer, field, codes, out_path, log, done, tr, create_files=True):
     """
     log(msg)  -> სტატუსის ჩაწერა
     done(result_dict) -> დასრულებისას გამოძახება
     tr(key, **fmt) -> თარგმანი
+    create_files -> True: ქმნის shp+gpkg-ს; False: მხოლოდ ეძებს (ფაილების გარეშე)
     """
     try:
         # უნიკალური, ნორმალიზებული კოდები, თანმიმდევრობის შენარჩუნებით
@@ -237,38 +243,44 @@ def run_search(gdb, layer, field, codes, out_path, log, done, tr):
         not_found = [c for c in requested if c not in found_norm]
         found_list = [c for c in requested if c in found_norm]
 
-        # შედეგის ჩაწერა — ორივე ფორმატში (Shapefile + GeoPackage)
+        # შედეგის ჩაწერა — ორივე ფორმატში (Shapefile + GeoPackage), თუ მოთხოვნილია
         written = 0
+        matched = 0
         out_files = []
+        result_out_path = None
         if frames:
             import warnings
             import geopandas as gpd
             result = pd.concat(frames, ignore_index=True)
             result = gpd.GeoDataFrame(result, geometry="geometry", crs=frames[0].crs)
-            written = len(result)
+            matched = len(result)
 
-            base = os.path.splitext(out_path)[0]
-            shp_path = base + ".shp"
-            gpkg_path = base + ".gpkg"
+            if create_files:
+                base = os.path.splitext(out_path)[0]
+                shp_path = base + ".shp"
+                gpkg_path = base + ".gpkg"
 
-            os.makedirs(os.path.dirname(base), exist_ok=True)
-            log(tr("rs_writing", n=written))
+                os.makedirs(os.path.dirname(base), exist_ok=True)
+                log(tr("rs_writing", n=matched))
 
-            # GeoPackage — სრული ინფო, უჭრელი
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                result.to_file(gpkg_path, driver="GPKG", encoding="utf-8")
-            out_files.append(gpkg_path)
-            log(f"  ✓ GeoPackage: {gpkg_path}")
+                # GeoPackage — სრული ინფო, უჭრელი
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    result.to_file(gpkg_path, driver="GPKG", encoding="utf-8")
+                out_files.append(gpkg_path)
+                log(f"  ✓ GeoPackage: {gpkg_path}")
 
-            # Shapefile
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                result.to_file(shp_path, driver="ESRI Shapefile", encoding="utf-8")
-            out_files.append(shp_path)
-            log(f"  ✓ Shapefile:  {shp_path}")
+                # Shapefile
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    result.to_file(shp_path, driver="ESRI Shapefile", encoding="utf-8")
+                out_files.append(shp_path)
+                log(f"  ✓ Shapefile:  {shp_path}")
 
-            out_path = shp_path  # ვერ ნაპოვნის .txt ამის გვერდით შეინახება
+                written = matched
+                result_out_path = shp_path  # ვერ ნაპოვნის .txt ამის გვერდით შეინახება
+            else:
+                log(tr("rs_search_only", n=matched))
         else:
             log(tr("rs_none"))
 
@@ -277,8 +289,10 @@ def run_search(gdb, layer, field, codes, out_path, log, done, tr):
             "found_list": found_list,
             "not_found": not_found,
             "written": written,
-            "out_path": out_path if frames else None,
+            "matched": matched,
+            "out_path": result_out_path,
             "out_files": out_files,
+            "search_only": not create_files,
         })
 
     except Exception as e:
@@ -368,6 +382,10 @@ class ParcelSearchTool(ToolFrame):
         self.out_var = tk.StringVar(value=initial("out", default_out))
         ttk.Entry(out, textvariable=self.out_var, width=70).grid(row=0, column=0, sticky="we", padx=6, pady=6)
         ttk.Button(out, text="...", width=3, command=self._browse_out).grid(row=0, column=1, padx=6)
+        # შეიპფაილის შექმნა — არჩევითი (მოხსნისას მხოლოდ ძებნა, ფაილების გარეშე)
+        self.create_shp_var = tk.BooleanVar(value=st.get("create_shp", True))
+        ttk.Checkbutton(out, text=tr("chk_create_shp"), variable=self.create_shp_var).grid(
+            row=1, column=0, sticky="w", padx=6, pady=(0, 6))
         out.columnconfigure(0, weight=1)
 
         # --- ღილაკი ---
@@ -393,6 +411,8 @@ class ParcelSearchTool(ToolFrame):
         st["field"] = self.field_var.get()
         st["out"] = self.out_var.get()
         st["codes"] = self.codes_text.get("1.0", "end").strip()
+        if hasattr(self, "create_shp_var"):
+            st["create_shp"] = self.create_shp_var.get()
 
     def _remember(self):
         """მიმდინარე ბაზის პარამეტრების მუდმივად შენახვა (git-ignored ფაილში)."""
@@ -512,7 +532,9 @@ class ParcelSearchTool(ToolFrame):
         if not (layer and field):
             messagebox.showerror(self.tr("err"), self.tr("err_layer_field"))
             return
-        if not out_path:
+        create_files = self.create_shp_var.get()
+        # გამომავალი გზა საჭიროა მხოლოდ მაშინ, თუ შეიპფაილს ვქმნით
+        if create_files and not out_path:
             messagebox.showerror(self.tr("err"), self.tr("err_out"))
             return
 
@@ -534,7 +556,7 @@ class ParcelSearchTool(ToolFrame):
             args=(gdb, layer, field, codes, out_path,
                   lambda m: self.msg_queue.put(("log", m)),
                   lambda r: self.msg_queue.put(("done", r)),
-                  self.tr),
+                  self.tr, create_files),
             daemon=True,
         )
         t.start()
@@ -582,9 +604,12 @@ class ParcelSearchTool(ToolFrame):
         self._log(self.tr("sum_total", n=len(result['requested'])))
         self._log(self.tr("sum_found", n=len(found)))
         self._log(self.tr("sum_nf", n=len(not_found)))
-        self._log(self.tr("sum_written", n=result['written']))
-        for fp in result.get("out_files", []):
-            self._log(self.tr("sum_file", p=fp))
+        if result.get("search_only"):
+            self._log(self.tr("sum_search_only"))
+        else:
+            self._log(self.tr("sum_written", n=result['written']))
+            for fp in result.get("out_files", []):
+                self._log(self.tr("sum_file", p=fp))
         self._log("=" * 50)
 
         if not_found:

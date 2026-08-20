@@ -1,0 +1,22 @@
+# GIS_BOX — გაერთიანებული დამოკიდებულებები / merged dependencies
+#
+# ბაზისური ხელსაწყოები (შაბლონის კოპირება) მხოლოდ stdlib-ს იყენებს — pip არ სჭირდება.
+# ქვემოთ ჩამოთვლილი პაკეტები საჭიროა ჩაშენებული ხელსაწყოებისთვის; მათ გარეშეც
+# GIS_BOX გაიხსნება, უბრალოდ შესაბამისი ხელსაწყო შეცდომას აჩვენებს.
+
+# --- ნაკვეთის ძებნა / parcel search ---
+geopandas>=1.0
+pyogrio>=0.9
+pandas>=2.0
+openpyxl>=3.1
+
+# --- კოორდინატების ამომღები / coordinate extractor ---
+numpy>=1.23
+opencv-python>=4.6
+Pillow>=9.0
+PyMuPDF>=1.23          # PDF-ის გახსნა
+
+# OCR backend (აირჩიე ერთი; rapidocr რეკომენდებულია — სისტემური binary არ სჭირდება)
+rapidocr-onnxruntime>=1.3
+# pytesseract>=0.3      # ალტერნატივა: ასევე დაინსტალირე Tesseract binary
+# easyocr>=1.7          # ალტერნატივა: დიდი ჩამოტვირთვა (torch-ს ითრევს)

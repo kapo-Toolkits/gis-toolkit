@@ -1,0 +1,11 @@
+# GIS_BOX — ნაკვეთის ძებნის კონფიგურაცია / parcel-search config
+#
+# გადაარქვი ამ ფაილს სახელი config.txt-ად და ჩაწერე შენი ბაზის გზა.
+# config.txt .gitignore-შია და GitHub-ზე არ აიტვირთება.
+#
+# Rename this file to config.txt and set your own database path.
+# config.txt is git-ignored and will not be uploaded to GitHub.
+
+GDB=C:\path\to\RegParcels.gdb
+LAYER=RegParcels
+FIELD=CADCODE

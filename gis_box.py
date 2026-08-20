@@ -57,6 +57,10 @@ TR = {
                      "ka": "ყოველი დაწკაპუნება ამატებს ახალ ასლს ზრდადი სუფიქსით "
                            "(…_1, …_2, …)."},
     "tc_copy":      {"en": "Copy",                 "ka": "კოპირება"},
+    "tc_remember":  {"en": "💾 Remember folder",   "ka": "💾 საქაღალდის დამახსოვრება"},
+    "tc_remember_all": {"en": "for all tools",     "ka": "ყველა ხელსაწყოსთვის"},
+    "tc_saved":     {"en": "Folder saved — it will be remembered next time.",
+                     "ka": "საქაღალდე შენახულია — მომდევნო გაშვებაზეც დაიმახსოვრდება."},
     "browse":       {"en": "Browse…",              "ka": "დათვალიერება…"},
     "warn_zone":    {"en": "Select at least one zone.",
                      "ka": "აირჩიე მინიმუმ ერთი ზონა."},
@@ -146,10 +150,13 @@ class TemplateCopier(ToolFrame):
         self.zone_vars = {}
         self._build_zones()
 
-        # სამიზნე
+        # სამიზნე — საწყისი გზა: სესია → ამ ხელსაწყოს შენახული → საერთო → ცარიელი
+        own_cfg = self.app.get_tool_config(self.tid)
+        shared = self.app.get_tool_config("_shared")
+        dest_initial = st.get("dest") or own_cfg.get("dest") or shared.get("target") or ""
         ttk.Label(self, text=self.t("tc_target")).grid(
             row=5, column=0, columnspan=3, sticky="w")
-        self.dest_var = tk.StringVar(value=st.get("dest", ""))
+        self.dest_var = tk.StringVar(value=dest_initial)
         ttk.Entry(self, textvariable=self.dest_var, width=52).grid(
             row=6, column=0, columnspan=2, sticky="ew", pady=(2, 0))
         ttk.Button(self, text=self.t("browse"), command=self.pick_dest).grid(
@@ -159,10 +166,37 @@ class TemplateCopier(ToolFrame):
                   wraplength=520, justify="left").grid(
             row=7, column=0, columnspan=3, sticky="w", pady=(10, 12))
 
-        ttk.Button(self, text=self.t("tc_copy"), command=self.do_copy).grid(
-            row=8, column=0, sticky="w")
+        # მოქმედებები: კოპირება + საქაღალდის დამახსოვრება (+ „ყველასთვის“)
+        actions = ttk.Frame(self)
+        actions.grid(row=8, column=0, columnspan=3, sticky="ew")
+        ttk.Button(actions, text=self.t("tc_copy"), command=self.do_copy).pack(side="left")
+        ttk.Button(actions, text=self.t("tc_remember"), command=self._remember).pack(
+            side="left", padx=(12, 4))
+        self.remember_all_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(actions, text=self.t("tc_remember_all"),
+                        variable=self.remember_all_var).pack(side="left")
 
         self.columnconfigure(0, weight=1)
+
+    def _remember(self):
+        """სამიზნე საქაღალდის მუდმივად შენახვა (git-ignored პარამეტრებში).
+
+        „ყველასთვის“ მონიშვნისას გზა ინახება საერთო ნაგულისხმევად და ცალკეული
+        შაბლონების პირადი override-ები იშლება — ე.ი. ერთი საქაღალდე ყველასთვის.
+        სხვა შემთხვევაში ინახება მხოლოდ ამ ხელსაწყოს პირადი გზა.
+        """
+        dest = self.dest_var.get().strip()
+        if self.remember_all_var.get():
+            self.app.set_tool_config("_shared", {"target": dest})
+            for cfg in TEMPLATE_SETS:
+                tc = self.app.get_tool_config(cfg["id"])
+                if tc.get("dest"):
+                    tc.pop("dest", None)
+                    self.app.set_tool_config(cfg["id"], tc)
+        else:
+            self.app.set_tool_config(self.tid, {"dest": dest})
+        self.save_state()
+        messagebox.showinfo("GIS_BOX", self.t("tc_saved"))
 
     def _build_zones(self):
         for w in self.zone_box.winfo_children():

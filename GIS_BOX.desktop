@@ -1,0 +1,13 @@
+# Linux desktop launcher.
+# შეცვალე /PATH/TO/GIS_BOX სამივე ხაზზე რეალურ გზაზე, შემდეგ:
+#   chmod +x GIS_BOX.desktop  და გადააკოპირე ~/.local/share/applications/-ში
+#   (ან Desktop-ზე და მარჯვენა-კლიკით "Allow Launching").
+[Desktop Entry]
+Type=Application
+Name=GIS_BOX
+Comment=GIS tools
+Exec=python3 "/PATH/TO/GIS_BOX/gis_box.py"
+Path=/PATH/TO/GIS_BOX
+Icon=/PATH/TO/GIS_BOX/gis_box.png
+Terminal=false
+Categories=Utility;Science;

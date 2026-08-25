@@ -27,6 +27,9 @@ env/
 found_parcels.*
 *_NOT_FOUND.txt
 
+# --- Windows იარლიყი: შეიცავს აბსოლუტურ, მანქანა-სპეციფიკურ გზებს ---
+*.lnk
+
 # --- IDE / OS ნაგავი ---
 .vscode/
 .idea/

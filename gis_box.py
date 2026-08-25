@@ -80,6 +80,7 @@ TR = {
     # ჩაშენებული ხელსაწყოები / bundled tools
     "parcel_name":  {"en": "Parcel search",        "ka": "ნაკვეთის ძებნა"},
     "coord_name":   {"en": "Coord. extractor",     "ka": "კოორდ. ამომღები"},
+    "rename_name":  {"en": "Rename → Latin",       "ka": "სახელების გადარქმევა"},
     "tool_load_err":{"en": "This tool could not be loaded.",
                      "ka": "ეს ინსტრუმენტი ვერ ჩაიტვირთა."},
     "tool_dep_hint":{"en": "A required package is probably missing. Install:",
@@ -334,6 +335,10 @@ class GisBoxApp(tk.Tk):
         # უფრო დიდი ნაგულისხმევი ზომა — ჩაშენებული ხელსაწყოებისთვის (რუკის canvas, ცხრილები)
         self.geometry("1180x760")
         self.minsize(860, 560)
+        try:                       # ფანჯრის ხატულა (Windows-ზე .ico)
+            self.iconbitmap(os.path.join(APP_DIR, "gis_box.ico"))
+        except tk.TclError:
+            pass
 
         # settings
         self.lang = "ka"
@@ -381,6 +386,10 @@ class GisBoxApp(tk.Tk):
             "name_en": TR["coord_name"]["en"], "name_ka": TR["coord_name"]["ka"],
             "factory": self._make_coord_tool,
         })
+        specs.append({
+            "name_en": TR["rename_name"]["en"], "name_ka": TR["rename_name"]["ka"],
+            "factory": self._make_rename_tool,
+        })
         return specs
 
     def _make_parcel_tool(self, master):
@@ -390,6 +399,10 @@ class GisBoxApp(tk.Tk):
     def _make_coord_tool(self, master):
         from tools.coord_tool import CoordExtractorTool
         return CoordExtractorTool(master, self)
+
+    def _make_rename_tool(self, master):
+        from tools.rename_transliterate import RenameTransliterateTool
+        return RenameTransliterateTool(master, self)
 
     def _instantiate_tool(self, idx):
         """ხელსაწყოს frame-ის შექმნა; შეცდომისას — მეგობრული error frame."""

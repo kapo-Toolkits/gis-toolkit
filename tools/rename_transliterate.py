@@ -60,6 +60,45 @@ def transliterate(name):
     return s.strip("_")
 
 
+def _sibling(path, ext):
+    """მოცემული ფაილის გვერდით მყოფი იმავე base-ის ფაილი მითითებული
+    გაფართოებით (რეგისტრის მიუხედავად). აბრუნებს გზას ან None."""
+    base = os.path.splitext(path)[0]
+    for e in (ext.lower(), ext.upper()):
+        cand = base + e
+        if os.path.exists(cand):
+            return cand
+    return None
+
+
+def feature_count(shp_path):
+    """Shapefile-ის ობიექტების რაოდენობა — დამოკიდებულებების გარეშე.
+
+    ObjectCount == .dbf-ის ჩანაწერების რაოდენობა (header-ის ბაიტები 4..7,
+    little-endian uint32). თუ .dbf არ არის — .shp-ის header-ის სიგრძით
+    ვადგენთ ცარიელობას (100 ბაიტი = მხოლოდ header, 0 გეომეტრია).
+    აბრუნებს int-ს, ან None თუ ვერ წავიკითხეთ."""
+    dbf = _sibling(shp_path, ".dbf")
+    if dbf:
+        try:
+            with open(dbf, "rb") as f:
+                head = f.read(8)
+            if len(head) >= 8:
+                return int.from_bytes(head[4:8], "little")
+        except OSError:
+            pass
+    # fallback — .shp-ის header (ბაიტები 24..27, big-endian, 16-ბიტიან სიტყვებში)
+    try:
+        with open(shp_path, "rb") as f:
+            head = f.read(100)
+        if len(head) >= 28:
+            words = int.from_bytes(head[24:28], "big")
+            return 0 if words * 2 <= 100 else -1   # -1 = „მასალა დევს“, ზუსტი N უცნობია
+    except OSError:
+        pass
+    return None
+
+
 # ---- თარგმანები ------------------------------------------------------------
 RTR = {
     "heading":   {"en": "Rename files → Latin",
@@ -99,6 +138,27 @@ RTR = {
     "nothing":   {"en": "Nothing to rename — run Preview first.",
                   "ka": "გადასარქმევი არაფერია — ჯერ „წინასწარი სია“ გაუშვი."},
     "err":       {"en": "Error", "ka": "შეცდომა"},
+
+    # ცარიელობის შემოწმება
+    "check":     {"en": "Check contents (empty or not)",
+                  "ka": "შემოწმება: მასალა დევს თუ ცარიელია"},
+    "check_hint":{"en": "Logs, for every .shp in the folder, its feature count "
+                        "and whether it is empty. Independent of renaming.",
+                  "ka": "საქაღალდის ყველა .shp-ისთვის ლოგში წერს ობიექტების "
+                        "რაოდენობას და ცარიელია თუ არა. გადარქმევისგან დამოუკიდებელი."},
+    "chk_none":  {"en": "No .shp files found in the folder.",
+                  "ka": "საქაღალდეში .shp ფაილი ვერ მოიძებნა."},
+    "chk_hdr":   {"en": "— Content check —", "ka": "— მასალის შემოწმება —"},
+    "chk_has":   {"en": "✓ {name} — {n} feature(s)",
+                  "ka": "✓ {name} — {n} ობიექტი"},
+    "chk_has_x": {"en": "✓ {name} — has data",
+                  "ka": "✓ {name} — მასალა დევს"},
+    "chk_empty": {"en": "⚠ {name} — EMPTY (0 features)",
+                  "ka": "⚠ {name} — ცარიელია (0 ობიექტი)"},
+    "chk_unknown": {"en": "? {name} — could not read",
+                    "ka": "? {name} — ვერ წავიკითხე"},
+    "chk_sum":   {"en": "— Checked {t}: {d} with data, {e} empty, {u} unreadable —",
+                  "ka": "— შემოწმდა {t}: {d} მასალით, {e} ცარიელი, {u} წაუკითხავი —"},
 }
 
 
@@ -142,6 +202,16 @@ class RenameTransliterateTool(ToolFrame):
             side="left", padx=(16, 4))
         ttk.Button(opt, text=self.tr("rename"), command=self._rename).pack(side="left")
 
+        # --- ცალკე მდგომი ფუნქცია: მასალის (ცარიელობის) შემოწმება ---
+        ttk.Separator(self, orient="horizontal").pack(fill="x", pady=(4, 6))
+        chk = ttk.Frame(self)
+        chk.pack(fill="x")
+        self.check_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(chk, text=self.tr("check"), variable=self.check_var,
+                        command=self._check_empty).pack(side="left")
+        ttk.Label(self, text=self.tr("check_hint"), foreground=pal["muted"],
+                  wraplength=620, justify="left").pack(anchor="w", pady=(0, 8))
+
         ttk.Label(self, text=self.tr("col_hint"),
                   foreground=pal["muted"]).pack(anchor="w")
         self.preview = scrolledtext.ScrolledText(
@@ -160,6 +230,41 @@ class RenameTransliterateTool(ToolFrame):
         if d:
             self.folder_var.set(os.path.normpath(d))
             self.app.set_tool_config(self.tid, {"folder": os.path.normpath(d)})
+
+    # ---- მასალის (ცარიელობის) შემოწმება — გადარქმევისგან დამოუკიდებელი ----
+    def _check_empty(self):
+        folder = self.folder_var.get().strip()
+        if not folder or not os.path.isdir(folder):
+            messagebox.showwarning("GIS_BOX", self.tr("warn_folder"))
+            return
+        shps = sorted((os.path.join(d, name) for d, name in self._iter_files(folder)
+                       if name.lower().endswith(".shp")),
+                      key=lambda p: os.path.basename(p).lower())
+        if not shps:
+            self.app.log("— " + self.tr("chk_none"))
+            messagebox.showinfo("GIS_BOX", self.tr("chk_none"))
+            return
+
+        self.app.log(self.tr("chk_hdr"))
+        with_data = empty = unknown = 0
+        for shp in shps:
+            name = os.path.basename(shp)
+            cnt = feature_count(shp)
+            if cnt is None:
+                unknown += 1
+                self.app.log(self.tr("chk_unknown", name=name))
+            elif cnt == 0:
+                empty += 1
+                self.app.log(self.tr("chk_empty", name=name))
+            elif cnt < 0:                     # მასალა დევს, ზუსტი რაოდენობა უცნობია
+                with_data += 1
+                self.app.log(self.tr("chk_has_x", name=name))
+            else:
+                with_data += 1
+                self.app.log(self.tr("chk_has", name=name, n=cnt))
+
+        self.app.log(self.tr("chk_sum", t=len(shps), d=with_data,
+                             e=empty, u=unknown))
 
     # ---- გეგმის აგება ----
     def _iter_files(self, folder):

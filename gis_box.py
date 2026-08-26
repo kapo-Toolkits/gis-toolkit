@@ -32,6 +32,11 @@ LANGS = {"en": "English", "ka": "ქართული"}
 TR = {
     "tools":        {"en": "Tools",                "ka": "ინსტრუმენტები"},
     "log":          {"en": "Log",                  "ka": "ლოგი"},
+    "log_clear":    {"en": "Clear",                "ka": "გასუფთავება"},
+    "log_save":     {"en": "Save .txt",            "ka": "შენახვა .txt"},
+    "log_empty":    {"en": "The log is empty.",     "ka": "ლოგი ცარიელია."},
+    "log_saved":    {"en": "Log saved:",           "ka": "ლოგი შენახულია:"},
+    "log_title":    {"en": "Save log",             "ka": "ლოგის შენახვა"},
     "language":     {"en": "Language",             "ka": "ენა"},
     "theme":        {"en": "Theme",                "ka": "თემა"},
     "light":        {"en": "Light",                "ka": "ღია"},
@@ -545,6 +550,11 @@ class GisBoxApp(tk.Tk):
         # ლოგი
         logframe = ttk.LabelFrame(self.container, text=self.t("log"), padding=4)
         logframe.pack(side="bottom", fill="x")
+        logbar = ttk.Frame(logframe)
+        logbar.pack(fill="x", pady=(0, 2))
+        ttk.Button(logbar, text=self.t("log_save"), command=self.save_log).pack(side="right")
+        ttk.Button(logbar, text=self.t("log_clear"), command=self.clear_log).pack(
+            side="right", padx=(0, 4))
         self.logbox = tk.Text(logframe, height=7, wrap="word",
                               font=("Consolas", 9), state="disabled",
                               bg=p["log_bg"], fg=p["log_fg"],
@@ -602,6 +612,32 @@ class GisBoxApp(tk.Tk):
         self.logbox.insert("end", "\n".join(self.log_lines) + "\n")
         self.logbox.see("end")
         self.logbox.configure(state="disabled")
+
+    def clear_log(self):
+        self.log_lines = []
+        self.logbox.configure(state="normal")
+        self.logbox.delete("1.0", "end")
+        self.logbox.configure(state="disabled")
+
+    def save_log(self):
+        if not self.log_lines:
+            messagebox.showinfo("GIS_BOX", self.t("log_empty"))
+            return
+        from datetime import datetime
+        default = "gis_box_log_" + datetime.now().strftime("%Y%m%d_%H%M%S") + ".txt"
+        path = filedialog.asksaveasfilename(
+            title=self.t("log_title"), defaultextension=".txt",
+            initialfile=default,
+            filetypes=[("Text", "*.txt"), ("All files", "*.*")])
+        if not path:
+            return
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                f.write("\n".join(self.log_lines) + "\n")
+        except OSError as e:
+            messagebox.showerror("GIS_BOX", str(e))
+            return
+        self.log(f"{self.t('log_saved')} {path}")
 
 
 def _enable_dpi_awareness():

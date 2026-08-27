@@ -167,6 +167,7 @@ class CoordExtractorApp:
         ttk.Button(exp, text=tr("exp_excel"), command=lambda: self._export(self.ocr_tree, "xlsx")).pack(side=tk.LEFT)
         ttk.Button(exp, text=tr("exp_csv"), command=lambda: self._export(self.ocr_tree, "csv")).pack(side=tk.LEFT, padx=4)
         ttk.Button(exp, text=tr("exp_json"), command=lambda: self._export(self.ocr_tree, "json")).pack(side=tk.LEFT)
+        ttk.Button(exp, text=tr("exp_format"), command=self._format_excel).pack(side=tk.LEFT, padx=(12, 0))
 
         ttk.Label(tab, text=tr("ocr_tip"), foreground="#888").pack(anchor=tk.W, pady=(6, 0))
 
@@ -215,6 +216,7 @@ class CoordExtractorApp:
         ttk.Button(exp, text=tr("exp_excel"), command=lambda: self._export(self.geo_tree, "xlsx")).pack(side=tk.LEFT)
         ttk.Button(exp, text=tr("exp_csv"), command=lambda: self._export(self.geo_tree, "csv")).pack(side=tk.LEFT, padx=4)
         ttk.Button(exp, text=tr("exp_json"), command=lambda: self._export(self.geo_tree, "json")).pack(side=tk.LEFT)
+        ttk.Button(exp, text=tr("exp_format"), command=self._format_excel).pack(side=tk.LEFT, padx=(12, 0))
 
     # --------------------------------------------------------------- image --
     def _set_image(self, img: np.ndarray, source: str):
@@ -586,7 +588,35 @@ class CoordExtractorApp:
         except Exception as e:
             messagebox.showerror(self.tr("export_failed"), str(e))
             return
+        if fmt == "xlsx":
+            self._last_xlsx = path            # „Format Excel“-ის ნაგულისხმევი
         self.status.set(self.tr("saved", name=os.path.basename(path)))
+
+    def _format_excel(self):
+        """დაფორმატებს არსებულ .xlsx-ს: ორიგინალის გვერდით ამატებს გასუფთავებულ,
+        ცენტრირებულ, ჩარჩოებიან ასლს (№/X/Y). ორიგინალს არ ცვლის."""
+        initial = getattr(self, "_last_xlsx", "") or ""
+        path = filedialog.askopenfilename(
+            title=self.tr("pick_xlsx"),
+            initialdir=os.path.dirname(initial) or None,
+            initialfile=os.path.basename(initial),
+            filetypes=[("Excel", "*.xlsx")])
+        if not path:
+            return
+        try:
+            _saved, n = export.format_xlsx(path)
+        except Exception as e:
+            messagebox.showerror(self.tr("format_failed"), str(e))
+            return
+        if n == 0:
+            messagebox.showinfo(self.tr("format_failed"), self.tr("format_empty"))
+            return
+        self._last_xlsx = path
+        msg = self.tr("format_done", n=n)
+        self.status.set(msg)
+        log = getattr(self.root, "log", None)
+        if callable(log):
+            log(msg)
 
 
 class _XYDialog:

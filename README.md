@@ -12,9 +12,11 @@ The UI is **bilingual** — Georgian / English (top-bar switch).
 
 | ინსტრუმენტი | აღწერა |
 |---|---|
-| **შაბლონის კოპირება** / Template copy | კოპირებს შაბლონურ shapefile-ს ყველა თანმხლები ფაილით (`.shp/.shx/.dbf/.prj/…`), ზრდადი სუფიქსით. |
+| **შაბლონის კოპირება** / Template copy | კოპირებს შაბლონურ shapefile-ს ყველა თანმხლები ფაილით (`.shp/.shx/.dbf/.prj/…`), ზრდადი სუფიქსით. რამდენიმე ნაკრები (მდინარის ნაპირი, გაზსადენის გადაკვეთა, დაცვის ზონა, UTM ბადე) — ახლის დამატება ერთი ჩანაწერით. |
 | **ნაკვეთის ძებნა** / Parcel search | ეძებს საკადასტრო კოდებს File Geodatabase-ში და ქმნის Shapefile + GeoPackage; ვერ ნაპოვნ კოდებს ცალკე ინახავს. |
-| **კოორდინატების ამომღები** / Coordinate extractor | რუკის სურათიდან/PDF-იდან ამოიღებს კოორდინატების ცხრილს (OCR) ან გეო-რეფერენსით ითვლის პოლიგონის წვეროებსა და ფართობს. |
+| **კოორდინატების ამომღები** / Coordinate extractor | რუკის სურათიდან/PDF-იდან ამოიღებს კოორდინატების ცხრილს (OCR) ან გეო-რეფერენსით ითვლის პოლიგონის წვეროებსა და ფართობს; Excel-ში გატანა და ფორმატირება. |
+| **სახელების გადარქმევა** / Rename → Latin | საქაღალდის ქართულ-სახელიან shapefile-ებს გადაარქმევს ლათინურად (სფეისი/სიმბოლო → `_`), წინასწარი სიით. ასევე ამოწმებს რომელ shapefile-ში დევს მასალა და რომელი ცარიელია. |
+| **Shp → კოორდინატები** / Shp → coordinates | წერტილოვანი shapefile-იდან კითხულობს X/Y-ს UTM ზონით (37/38, .prj-დან ან ხელით) და გააქვს დაფორმატებულ Excel-ში — ტექსტური ქუდი, `№/X/Y`, არჩევითი „გადაკვეთის კუთხე“ (°), center+borders. |
 
 ---
 
@@ -68,14 +70,17 @@ Alternative (optional): copy `config.example.txt` → `config.txt` and set your 
 
 ```
 GIS_BOX/
-├─ gis_box.py            # მთავარი აპლიკაცია / main app (sidebar + lazy loading)
+├─ gis_box.py                # მთავარი აპლიკაცია / main app (sidebar + lazy loading)
 ├─ tools/
-│  ├─ base.py            # ToolFrame ბაზისური კლასი
-│  ├─ parcel_search.py   # ნაკვეთის ძებნა
-│  ├─ coord_tool.py      # კოორდინატების ამომღების wrapper
-│  └─ coordextract/      # OCR + გეო-რეფერენსის პაკეტი
-├─ shp/                  # შაბლონური shapefile-ები (ცარიელი / საჯარო UTM ბადე)
-├─ config.example.txt    # კონფიგის ნიმუში (config.txt git-ignored)
+│  ├─ base.py                # ToolFrame ბაზისური კლასი
+│  ├─ parcel_search.py       # ნაკვეთის ძებნა
+│  ├─ rename_transliterate.py# სახელების გადარქმევა + მასალის შემოწმება
+│  ├─ shp_coords.py          # Shp → კოორდინატები (Excel)
+│  ├─ coord_tool.py          # კოორდინატების ამომღების wrapper
+│  └─ coordextract/          # OCR + გეო-რეფერენსის პაკეტი
+├─ shp/                      # შაბლონური shapefile-ები (ცარიელი / საჯარო UTM ბადე)
+├─ config.example.txt        # კონფიგის ნიმუში (config.txt git-ignored)
+├─ GIS_BOX.bat / .command / .desktop  # გამშვებები Windows / macOS / Linux
 └─ requirements.txt
 ```
 

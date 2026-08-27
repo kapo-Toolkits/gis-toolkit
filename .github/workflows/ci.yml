@@ -1,0 +1,27 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  compile:
+    name: Byte-compile (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      # ყველა წყაროს სინტაქსის შემოწმება — მძიმე დამოკიდებულებების ინსტალაციის
+      # გარეშე (compileall მხოლოდ ბაიტ-კომპილაციას აკეთებს, არ აიმპორტებს).
+      - name: Byte-compile all sources
+        run: python -m compileall -q gis_box.py tools

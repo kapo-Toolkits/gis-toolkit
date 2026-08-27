@@ -1,0 +1,24 @@
+# ხაზების დაბოლოებების ნორმალიზება / line-ending normalization
+# ტექსტური ფაილები რეპოში LF-ით ინახება (რომ Mac/Linux/Windows-ზე ერთნაირად იმუშაოს).
+* text=auto eol=lf
+
+# Windows batch — CRLF სჭირდება
+*.bat        text eol=crlf
+
+# Mac/Linux გამშვებები — LF უნდა შერჩეთ (CRLF shebang-ს ტეხავს)
+*.command    text eol=lf
+*.sh         text eol=lf
+*.desktop    text eol=lf
+
+# ბინარული ასეთები — Git-მა არ შეასწოროს
+*.ico        binary
+*.png        binary
+*.shp        binary
+*.shx        binary
+*.dbf        binary
+*.sbn        binary
+*.sbx        binary
+
+# shapefile-ის თანმხლები ტექსტური ფაილები
+*.prj        text
+*.cpg        text

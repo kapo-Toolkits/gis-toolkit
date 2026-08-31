@@ -17,9 +17,10 @@ homepage: https://github.com/kapo-Toolkits/gis-toolkit
 license: MIT
 
 contents:
-  # PyInstaller-ის onedir → /opt/gis-box/
-  - src: ./dist/GIS_BOX/
-    dst: /opt/gis-box/
+  # PyInstaller-ის onedir → /opt/gis-box/ (type: tree — სტრუქტურას ინახავს)
+  - src: ./dist/GIS_BOX
+    dst: /opt/gis-box
+    type: tree
   # გამშვები სიმლინკი PATH-ში
   - src: /opt/gis-box/GIS_BOX
     dst: /usr/bin/gis-box

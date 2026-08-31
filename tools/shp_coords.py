@@ -63,6 +63,9 @@ RTR = {
     "tmpl_none": {"en": "(none)", "ka": "(არცერთი)"},
     "tmpl_add":  {"en": "➕ Add…", "ka": "➕ დამატება…"},
     "tmpl_add_q":{"en": "New header template text:", "ka": "ახალი ქუდის ტექსტი:"},
+    "tmpl_del":  {"en": "🗑 Delete", "ka": "🗑 წაშლა"},
+    "tmpl_del_q":{"en": "Delete this header template?",
+                  "ka": "წავშალო ეს ტექსტური ქუდი?"},
     "angle":     {"en": "Add “crossing angle” column (°)",
                   "ka": "„გადაკვეთის კუთხე“ სვეტი (°)"},
     "angle_hdr": {"en": "gadakveTis kuTxe", "ka": "გადაკვეთის კუთხე"},
@@ -178,6 +181,8 @@ class ShpCoordsTool(ToolFrame):
         self.tmpl_combo.pack(side="left", fill="x", expand=True, padx=(6, 6))
         self._refresh_templates()
         ttk.Button(trow, text=self.tr("tmpl_add"), command=self._add_template).pack(side="left")
+        ttk.Button(trow, text=self.tr("tmpl_del"), command=self._delete_template).pack(
+            side="left", padx=(4, 0))
 
         # გადაკვეთის კუთხე
         arow = ttk.Frame(self)
@@ -227,6 +232,23 @@ class ShpCoordsTool(ToolFrame):
         self.app.set_tool_config(self.tid, cfg)
         self._refresh_templates()
         self.tmpl_var.set(txt)
+
+    def _delete_template(self):
+        cur = self.tmpl_var.get()
+        if not cur or cur == self.tr("tmpl_none"):
+            return
+        tmpls = self._templates()
+        if cur not in tmpls:
+            return
+        if not messagebox.askyesno("GIS_BOX",
+                                   f"{self.tr('tmpl_del_q')}\n\n{cur}"):
+            return
+        tmpls.remove(cur)
+        cfg = self.app.get_tool_config(self.tid)
+        cfg["templates"] = tmpls
+        self.app.set_tool_config(self.tid, cfg)
+        self._refresh_templates()
+        self.tmpl_var.set(self.tr("tmpl_none"))
 
     # ---- საქაღალდე / სკანირება ----
     def _pick_folder(self):

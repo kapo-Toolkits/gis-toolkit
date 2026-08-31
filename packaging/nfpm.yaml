@@ -1,0 +1,31 @@
+# nfpm კონფიგი — deb/rpm პაკეტები PyInstaller-ის onedir გამოსავლიდან.
+# გამოყენება: VERSION=1.0.0 nfpm package -f packaging/nfpm.yaml -p deb
+# (VERSION გარემოს ცვლადი ავტომატურად ჩაისმება — nfpm აფართოებს ${...}-ს.)
+name: gis-box
+arch: amd64
+platform: linux
+version: ${VERSION}
+section: science
+priority: optional
+maintainer: Giorgi Kapanadze <noreply@users.noreply.github.com>
+description: |
+  GIS_BOX — a small collection of GIS tools in one window:
+  template copy, parcel search, coordinate extractor, batch rename and
+  shapefile-to-Excel coordinate export.
+vendor: GIS_BOX
+homepage: https://github.com/kapo-Toolkits/gis-toolkit
+license: MIT
+
+contents:
+  # PyInstaller-ის onedir → /opt/gis-box/
+  - src: ./dist/GIS_BOX/
+    dst: /opt/gis-box/
+  # გამშვები სიმლინკი PATH-ში
+  - src: /opt/gis-box/GIS_BOX
+    dst: /usr/bin/gis-box
+    type: symlink
+  # მენიუს ჩანაწერი და ხატულა
+  - src: ./packaging/gis-box.desktop
+    dst: /usr/share/applications/gis-box.desktop
+  - src: ./gis_box.png
+    dst: /usr/share/icons/hicolor/256x256/apps/gis-box.png

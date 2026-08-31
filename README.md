@@ -20,6 +20,24 @@ The UI is **bilingual** — Georgian / English (top-bar switch).
 
 ---
 
+## ჩამოტვირთვა (მზა ბილდი) / Download (prebuilt)
+
+Python-ის გარეშე გასაშვებად იხილე **[Releases](https://github.com/kapo-Toolkits/gis-toolkit/releases)** —
+`v*` ტეგზე CI ავტომატურად აწყობს დამოუკიდებელ ბილდებს:
+
+For a no-Python run, see the **[Releases](https://github.com/kapo-Toolkits/gis-toolkit/releases)** page —
+each `v*` tag builds standalone artifacts:
+
+| პლატფორმა | ფაილი |
+|---|---|
+| Windows | `GIS_BOX-windows-x64.zip` (გახსენი და გაუშვი `GIS_BOX.exe`) |
+| Linux | `GIS_BOX-linux-x64.tar.gz`, `.deb`, `.rpm`, `.AppImage` |
+
+ლოკალურად ასაწყობად: `pip install pyinstaller -r requirements.txt && pyinstaller gis_box.spec`
+(გამოსავალი — `dist/GIS_BOX/`).
+
+---
+
 ## გაშვება / Run
 
 ```bash

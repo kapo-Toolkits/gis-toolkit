@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=GIS_BOX
+Comment=A small collection of GIS tools
+Exec=/usr/bin/gis-box
+Icon=gis-box
+Terminal=false
+Categories=Utility;Science;Geoscience;

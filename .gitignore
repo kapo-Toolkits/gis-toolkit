@@ -17,6 +17,12 @@ __pycache__/
 *.py[cod]
 *.pyo
 
+# --- PyInstaller / build არტეფაქტები ---
+build/
+dist/
+*.manifest
+build_log.txt
+
 # --- ვირტუალური გარემო ---
 .venv/
 venv/

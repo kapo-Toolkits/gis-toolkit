@@ -157,6 +157,7 @@ CHUNK_SIZE = 1000  # რამდენ კოდს ვეძებთ ერ�
 
 # CadData.gdb-ის დათასეთების კოდები → რეგიონები (სუფთა ლოგიკა ცალკე მოდულში)
 from tools.regions import REGION_CODES, region_name, layer_display, layer_code
+from tools.fields import pick_code_field
 
 
 # ---------------------------------------------------------------------------
@@ -529,10 +530,8 @@ class ParcelSearchTool(ToolFrame):
             info = pyogrio.read_info(gdb, layer=layer)
             fields = list(info["fields"])
             self.field_combo["values"] = fields
-            if self.field_var.get() not in fields:
-                # ვცადოთ CADCODE-ის მსგავსი ველის მოძებნა
-                guess = next((f for f in fields if "CAD" in f.upper()), fields[0] if fields else "")
-                self.field_var.set(guess)
+            self.field_var.set(pick_code_field(fields, self.field_var.get(),
+                                               DEFAULT_FIELD))
         except Exception as e:
             if not silent:
                 messagebox.showerror(self.tr("err"), str(e))

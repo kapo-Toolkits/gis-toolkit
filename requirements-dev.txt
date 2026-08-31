@@ -1,0 +1,4 @@
+# სამუშაო/ტესტირების დამოკიდებულებები / dev & test dependencies
+# გაშვება: pip install -r requirements-dev.txt  &&  pytest
+pytest>=7.0
+openpyxl>=3.1

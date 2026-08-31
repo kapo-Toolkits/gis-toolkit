@@ -155,34 +155,8 @@ DEFAULT_GDBS = [p.strip() for p in re.split(r"[;\n]+", _CFG.get("GDBS", ""))
                 if p.strip()]
 CHUNK_SIZE = 1000  # რამდენ კოდს ვეძებთ ერთ მოთხოვნაში
 
-# CadData.gdb-ის დათასეთების კოდები → რეგიონები (ჩამოსაშლელში „სანიშნესავით“).
-REGION_CODES = {
-    "R02": "ქვემო ქართლი",
-    "R03": "მცხეთა-მთიანეთი",
-    "R04": "აჭარა",
-    "R05": "სამეგრელო-ზემო სვანეთი",
-    "R06": "კახეთი",
-    "R07": "შიდა ქართლი",
-    "R08": "გურია",
-    "R09": "სამცხე-ჯავახეთი",
-    "R10": "იმერეთი",
-    "R11": "რაჭა ლეჩხუმი-ქვემო სვანეთი",
-    "R12": "აფხაზეთი",
-    "Z01": "თბილისი",
-}
-
-
-def region_name(raw):
-    """შრის ნამდვილი სახელიდან რეგიონის დასახელება (ან None)."""
-    if not raw:
-        return None
-    up = raw.upper()
-    if up in REGION_CODES:
-        return REGION_CODES[up]
-    for code, name in REGION_CODES.items():          # პრეფიქსით (მაგ. R02_Parcels)
-        if up.startswith(code):
-            return name
-    return None
+# CadData.gdb-ის დათასეთების კოდები → რეგიონები (სუფთა ლოგიკა ცალკე მოდულში)
+from tools.regions import REGION_CODES, region_name, layer_display, layer_code
 
 
 # ---------------------------------------------------------------------------
@@ -545,16 +519,8 @@ class ParcelSearchTool(ToolFrame):
             if not silent:
                 messagebox.showerror(self.tr("err"), str(e))
 
-    @staticmethod
-    def _layer_display(raw):
-        """შრის სახელი ჩამონათვალისთვის: „R02 — ქვემო ქართლი“ (თუ რეგიონია)."""
-        name = region_name(raw)
-        return f"{raw} — {name}" if name else raw
-
-    @staticmethod
-    def _layer_code(display):
-        """ჩამონათვალის ჩანაწერიდან შრის ნამდვილი სახელი (რეგიონის სუფიქსის გარეშე)."""
-        return display.split(" — ", 1)[0].strip() if display else display
+    _layer_display = staticmethod(layer_display)
+    _layer_code = staticmethod(layer_code)
 
     def _load_fields(self, silent=False):
         gdb = self.gdb_var.get().strip()

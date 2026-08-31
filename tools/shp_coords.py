@@ -72,6 +72,15 @@ RTR = {
     "angle_all": {"en": "same angle for all (optional):",
                   "ka": "ერთი კუთხე ყველასთვის (არჩევით):"},
     "export":    {"en": "Export & format (Excel)", "ka": "ექსპორტი და ფორმატირება (Excel)"},
+    "preview":   {"en": "Preview", "ka": "წინასწარ ნახვა"},
+    "batch":     {"en": "Batch: export all…", "ka": "Batch: ყველას ექსპორტი…"},
+    "batch_dir": {"en": "Choose output folder for batch export",
+                  "ka": "აირჩიე batch-ის გამომავალი საქაღალდე"},
+    "batch_done":{"en": "Batch done — exported {ok}, skipped {sk}.",
+                  "ka": "Batch დასრულდა — გაიტანა {ok}, გამოტოვდა {sk}."},
+    "batch_skip":{"en": "skipped (no zone / no points):",
+                  "ka": "გამოტოვდა (ზონა/წერტილი არ არის):"},
+    "prev_count":{"en": "{n} point(s)", "ka": "{n} წერტილი"},
     "apply_deg": {"en": "Add ° to angle column…", "ka": "° დაუმატე კუთხის სვეტს…"},
     "pick_xlsx": {"en": "Choose the Excel file", "ka": "აირჩიე Excel ფაილი"},
     "deg_done":  {"en": "° applied to {n} angle cell(s).",
@@ -196,10 +205,31 @@ class ShpCoordsTool(ToolFrame):
         actions = ttk.Frame(self)
         actions.grid(row=10, column=0, columnspan=3, sticky="w")
         ttk.Button(actions, text=self.tr("export"), command=self._export).pack(side="left")
+        ttk.Button(actions, text=self.tr("preview"), command=self._preview).pack(
+            side="left", padx=(12, 0))
+        ttk.Button(actions, text=self.tr("batch"), command=self._batch).pack(
+            side="left", padx=(4, 0))
         ttk.Button(actions, text=self.tr("apply_deg"), command=self._apply_degree).pack(
             side="left", padx=(12, 0))
 
+        # წინასწარი ცხრილი — ექსპორტამდე კოორდინატების გადასამოწმებლად
+        prev = ttk.Frame(self)
+        prev.grid(row=11, column=0, columnspan=3, sticky="nsew", pady=(10, 0))
+        self.prev_count = tk.StringVar(value="")
+        ttk.Label(prev, textvariable=self.prev_count,
+                  foreground=pal["muted"]).pack(anchor="w")
+        self.table = ttk.Treeview(prev, columns=("no", "x", "y"),
+                                  show="headings", height=8)
+        for c, w in (("no", 50), ("x", 130), ("y", 130)):
+            self.table.heading(c, text={"no": "№", "x": "X", "y": "Y"}[c])
+            self.table.column(c, width=w, anchor="center")
+        vsb = ttk.Scrollbar(prev, orient="vertical", command=self.table.yview)
+        self.table.configure(yscrollcommand=vsb.set)
+        self.table.pack(side="left", fill="both", expand=True)
+        vsb.pack(side="left", fill="y")
+
         self.columnconfigure(0, weight=1)
+        self.rowconfigure(11, weight=1)
 
         if self.folder_var.get():
             self._scan()
@@ -301,6 +331,7 @@ class ShpCoordsTool(ToolFrame):
         n = self._count_points(shp)
         self.app.log(self.tr("detected", name=self.shp_var.get(),
                              z=(z or "?"), n=n))
+        self._preview()          # არჩევისთანავე ცხრილში ჩანს
 
     # ---- shapefile-ის კითხვა ----
     @staticmethod
@@ -354,17 +385,48 @@ class ShpCoordsTool(ToolFrame):
                 pts.append((idv, x, y))
         return pts
 
+    def _resolve_zone(self, shp=None):
+        """მოქმედი ზონა: ხელით არჩეული (37/38) ან ავტო — .prj-დან ცნობილი
+        (batch-ისთვის — კონკრეტული ფაილიდან). აბრუნებს 37/38-ს ან None-ს."""
+        if self.zone_var.get() in ("37", "38"):
+            return int(self.zone_var.get())
+        if shp is not None:
+            return self._detect_zone(shp)
+        return self._detected_zone
+
+    # ---- წინასწარი ცხრილი ----
+    def _fill_table(self, points):
+        self.table.delete(*self.table.get_children())
+        vtype = self.vtype_var.get()
+        for i, (_idv, x, y) in enumerate(points, 1):
+            xv = int(round(x)) if vtype == "int" else x
+            yv = int(round(y)) if vtype == "int" else y
+            self.table.insert("", "end", values=(i, xv, yv))
+        self.prev_count.set(self.tr("prev_count", n=len(points)))
+
+    def _preview(self):
+        shp = self._shp_map.get(self.shp_var.get())
+        if not shp:
+            return
+        zone = self._resolve_zone(shp)
+        if zone not in (37, 38):
+            self._fill_table([])
+            return
+        try:
+            points = self._read_points(shp, zone)
+        except Exception as e:
+            self.app.log(f"⚠ {self.tr('load_err')} {e}")
+            self._fill_table([])
+            return
+        self._fill_table(points)
+
     # ---- ექსპორტი ----
     def _export(self):
         shp = self._shp_map.get(self.shp_var.get())
         if not shp:
             messagebox.showwarning("GIS_BOX", self.tr("pick_shp"))
             return
-        # ზონა
-        if self.zone_var.get() == "auto":
-            zone = self._detected_zone
-        else:
-            zone = int(self.zone_var.get())
+        zone = self._resolve_zone(shp)
         if zone not in (37, 38):
             messagebox.showwarning("GIS_BOX", self.tr("need_zone"))
             return
@@ -386,6 +448,23 @@ class ShpCoordsTool(ToolFrame):
         if not path:
             return
 
+        template, angle_on, angle_all, vtype = self._current_settings()
+        try:
+            self._write_workbook(
+                path, sheet_name=os.path.basename(shp), points=points,
+                value_type=vtype, template=template,
+                angle_on=angle_on, angle_all=angle_all)
+        except Exception as e:
+            messagebox.showerror(self.tr("err"), str(e))
+            return
+
+        self._last_xlsx = path
+        msg = self.tr("done", n=len(points), path=path)
+        self.app.log("— " + msg)
+        messagebox.showinfo("GIS_BOX", msg)
+
+    def _current_settings(self):
+        """მიმდინარე UI პარამეტრები: (template, angle_on, angle_all, vtype)."""
         template = self.tmpl_var.get()
         if template == self.tr("tmpl_none"):
             template = ""
@@ -398,20 +477,49 @@ class ShpCoordsTool(ToolFrame):
                     angle_all = int(angle_all)
             except ValueError:
                 angle_all = None
+        return template, self.angle_var.get(), angle_all, self.vtype_var.get()
 
-        try:
-            self._write_workbook(
-                path, sheet_name=os.path.basename(shp), points=points,
-                value_type=self.vtype_var.get(), template=template,
-                angle_on=self.angle_var.get(), angle_all=angle_all)
-        except Exception as e:
-            messagebox.showerror(self.tr("err"), str(e))
+    # ---- Batch: საქაღალდის ყველა წერტილოვანი shapefile ერთბაშად ----
+    def _batch(self):
+        if not self._shp_map:
+            messagebox.showinfo("GIS_BOX", self.tr("no_shp"))
             return
-
-        self._last_xlsx = path
-        msg = self.tr("done", n=len(points), path=path)
+        outdir = filedialog.askdirectory(title=self.tr("batch_dir"))
+        if not outdir:
+            return
+        template, angle_on, angle_all, vtype = self._current_settings()
+        ok = skipped = 0
+        for name, shp in self._shp_map.items():
+            zone = self._resolve_zone(shp)      # ხელით არჩეული ან ფაილიდან ცნობილი
+            if zone not in (37, 38):
+                self.app.log(f"↷ {self.tr('batch_skip')} {name}")
+                skipped += 1
+                continue
+            try:
+                points = self._read_points(shp, zone)
+            except Exception as e:
+                self.app.log(f"✗ {name}: {e}")
+                skipped += 1
+                continue
+            if not points:
+                self.app.log(f"↷ {self.tr('batch_skip')} {name}")
+                skipped += 1
+                continue
+            base = os.path.splitext(name)[0]
+            outpath = os.path.join(outdir, base + ".xlsx")
+            try:
+                self._write_workbook(
+                    outpath, sheet_name=name, points=points, value_type=vtype,
+                    template=template, angle_on=angle_on, angle_all=angle_all)
+                self.app.log(f"✓ {base}.xlsx ({len(points)})")
+                self._last_xlsx = outpath
+                ok += 1
+            except Exception as e:
+                self.app.log(f"✗ {name}: {e}")
+                skipped += 1
+        msg = self.tr("batch_done", ok=ok, sk=skipped)
         self.app.log("— " + msg)
-        messagebox.showinfo("GIS_BOX", msg)
+        messagebox.showinfo("GIS_BOX", f"{msg}\n\n{outdir}")
 
     # ---- ° დამატება არსებულ ფაილში (რიცხვების ჩაწერის შემდეგ) ----
     def _apply_degree(self):

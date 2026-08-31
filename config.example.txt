@@ -9,3 +9,8 @@
 GDB=C:\path\to\RegParcels.gdb
 LAYER=RegParcels
 FIELD=CADCODE
+
+# არჩევითი: რამდენიმე ბაზა ჩამოსაშლელ სიაში (გამოყავი „;“-ით).
+# ხელსაწყოში ბაზას ირჩევ, კითხულობ შრეებს, ირჩევ ველს და ეძებ — იგივე ლოგიკით.
+# Optional: several databases in the dropdown (separate with ";").
+# GDBS=C:\data\CadData.gdb;C:\data\RegServituti.gdb;C:\data\RegXazovani.gdb

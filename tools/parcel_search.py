@@ -30,6 +30,9 @@ PTR = {
     "sec_db":        {"en": "1. Database", "ka": "1. მონაცემთა ბაზა"},
     "lbl_gdb":       {"en": "GDB database:", "ka": "GDB ბაზა:"},
     "btn_read_layers": {"en": "Read layers", "ka": "შრეების წაკითხვა"},
+    "btn_db_remove": {"en": "🗑 Remove DB", "ka": "🗑 ბაზის წაშლა"},
+    "db_remove_q":   {"en": "Remove this database from the list?",
+                      "ka": "წავშალო ეს ბაზა სიიდან?"},
     "btn_remember":  {"en": "💾 Remember settings", "ka": "💾 პარამეტრების დამახსოვრება"},
     "cfg_saved":     {"en": "Settings saved — they will be remembered next time.",
                       "ka": "პარამეტრები შენახულია — მომდევნო გაშვებაზეც დაიმახსოვრდება."},
@@ -147,7 +150,39 @@ _CFG = _load_config()
 DEFAULT_GDB = _CFG["GDB"]
 DEFAULT_LAYER = _CFG["LAYER"]
 DEFAULT_FIELD = _CFG["FIELD"]
+# არჩევითი: რამდენიმე ბაზა config.txt-ში — GDBS=path1;path2;path3
+DEFAULT_GDBS = [p.strip() for p in re.split(r"[;\n]+", _CFG.get("GDBS", ""))
+                if p.strip()]
 CHUNK_SIZE = 1000  # რამდენ კოდს ვეძებთ ერთ მოთხოვნაში
+
+# CadData.gdb-ის დათასეთების კოდები → რეგიონები (ჩამოსაშლელში „სანიშნესავით“).
+REGION_CODES = {
+    "R02": "ქვემო ქართლი",
+    "R03": "მცხეთა-მთიანეთი",
+    "R04": "აჭარა",
+    "R05": "სამეგრელო-ზემო სვანეთი",
+    "R06": "კახეთი",
+    "R07": "შიდა ქართლი",
+    "R08": "გურია",
+    "R09": "სამცხე-ჯავახეთი",
+    "R10": "იმერეთი",
+    "R11": "რაჭა ლეჩხუმი-ქვემო სვანეთი",
+    "R12": "აფხაზეთი",
+    "Z01": "თბილისი",
+}
+
+
+def region_name(raw):
+    """შრის ნამდვილი სახელიდან რეგიონის დასახელება (ან None)."""
+    if not raw:
+        return None
+    up = raw.upper()
+    if up in REGION_CODES:
+        return REGION_CODES[up]
+    for code, name in REGION_CODES.items():          # პრეფიქსით (მაგ. R02_Parcels)
+        if up.startswith(code):
+            return name
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -335,11 +370,21 @@ class ParcelSearchTool(ToolFrame):
         db = ttk.LabelFrame(self, text=tr("sec_db"))
         db.pack(fill="x", **pad)
 
+        # შენახული ბაზების სია: მუდმივი კონფიგი → config.txt (GDBS) → ერთი DEFAULT_GDB
+        self._databases = list(saved.get("databases") or DEFAULT_GDBS
+                               or ([DEFAULT_GDB] if DEFAULT_GDB else []))
+
         ttk.Label(db, text=tr("lbl_gdb")).grid(row=0, column=0, sticky="w", padx=6, pady=3)
-        self.gdb_var = tk.StringVar(value=initial("gdb", DEFAULT_GDB))
-        ttk.Entry(db, textvariable=self.gdb_var, width=70).grid(row=0, column=1, sticky="we", padx=6)
+        self.gdb_var = tk.StringVar(value=initial("gdb", DEFAULT_GDB)
+                                    or (self._databases[0] if self._databases else ""))
+        # ჩამოსაშლელი — რამდენიმე ბაზას შორის გადართვა (რედაქტირებადი: ახლის ჩაწერაც შეიძლება)
+        self.gdb_combo = ttk.Combobox(db, textvariable=self.gdb_var,
+                                      values=self._databases, width=68)
+        self.gdb_combo.grid(row=0, column=1, sticky="we", padx=6)
+        self.gdb_combo.bind("<<ComboboxSelected>>", lambda e: self._on_db_selected())
         ttk.Button(db, text="...", width=3, command=self._browse_gdb).grid(row=0, column=2, padx=4)
         ttk.Button(db, text=tr("btn_read_layers"), command=self._load_layers).grid(row=0, column=3, padx=6)
+        ttk.Button(db, text=tr("btn_db_remove"), command=self._remove_db).grid(row=0, column=4, padx=(0, 6))
 
         ttk.Label(db, text=tr("lbl_layer")).grid(row=1, column=0, sticky="w", padx=6, pady=3)
         self.layer_var = tk.StringVar(value=initial("layer", DEFAULT_LAYER))
@@ -411,10 +456,15 @@ class ParcelSearchTool(ToolFrame):
 
         self.after(100, self._poll_queue)
 
+        # გაშვებისთანავე — ბაზის ყველა შრის ავტომატური წაკითხვა (popup-ის გარეშე),
+        # კონკრეტული შრე/ველი ნაგულისხმევად რჩება.
+        if self.gdb_var.get().strip():
+            self.after(0, lambda: self._load_layers(silent=True))
+
     def save_state(self):
         st = self._state()
         st["gdb"] = self.gdb_var.get()
-        st["layer"] = self.layer_var.get()
+        st["layer"] = self._layer_code(self.layer_var.get())
         st["field"] = self.field_var.get()
         st["out"] = self.out_var.get()
         st["codes"] = self.codes_text.get("1.0", "end").strip()
@@ -423,15 +473,42 @@ class ParcelSearchTool(ToolFrame):
             st["gpkg"] = self.gpkg_var.get()
 
     def _remember(self):
-        """მიმდინარე ბაზის პარამეტრების მუდმივად შენახვა (git-ignored ფაილში)."""
+        """მიმდინარე ბაზის პარამეტრების მუდმივად შენახვა (git-ignored ფაილში).
+
+        მიმდინარე ბაზა ემატება ჩამოსაშლელი სიის (databases) მუდმივ ნაკრებს."""
+        gdb = self.gdb_var.get().strip()
+        if gdb and gdb not in self._databases:
+            self._databases.append(gdb)
+            self.gdb_combo["values"] = self._databases
         self.app.set_tool_config(self.tid, {
-            "gdb": self.gdb_var.get().strip(),
-            "layer": self.layer_var.get().strip(),
+            "gdb": gdb,
+            "layer": self._layer_code(self.layer_var.get().strip()),
             "field": self.field_var.get().strip(),
             "out": self.out_var.get().strip(),
+            "databases": self._databases,
         })
         self.save_state()
         messagebox.showinfo(self.tr("saved_title"), self.tr("cfg_saved"))
+
+    def _on_db_selected(self):
+        """ჩამოსაშლელიდან ბაზის არჩევისას — ყველა შრის ავტომატური, ჩუმი წაკითხვა
+        (popup-ის გარეშე). „Read layers“ ღილაკი კი ცხად შეცდომას აჩვენებს."""
+        if self.gdb_var.get().strip():
+            self._load_layers(silent=True)
+
+    def _remove_db(self):
+        """მიმდინარე ბაზის ამოღება ჩამოსაშლელი სიიდან (მუდმივადაც)."""
+        gdb = self.gdb_var.get().strip()
+        if gdb not in self._databases:
+            return
+        if not messagebox.askyesno("GIS_BOX", f"{self.tr('db_remove_q')}\n\n{gdb}"):
+            return
+        self._databases.remove(gdb)
+        self.gdb_combo["values"] = self._databases
+        cfg = self.app.get_tool_config(self.tid)
+        cfg["databases"] = self._databases
+        self.app.set_tool_config(self.tid, cfg)
+        self.gdb_var.set(self._databases[0] if self._databases else "")
 
     # ---- ბაზის დამხმარეები ----
     def _browse_gdb(self):
@@ -440,27 +517,48 @@ class ParcelSearchTool(ToolFrame):
             self.gdb_var.set(p)
             self._load_layers()
 
-    def _load_layers(self):
+    def _load_layers(self, silent=False):
+        """ბაზიდან ყველა შრის წაკითხვა ჩამონათვალში. კონკრეტული (კონფიგში
+        მითითებული) შრე რჩება ნაგულისხმევად, თუ ბაზაში არსებობს; თუ არა —
+        პირველი. silent=True — popup-ების გარეშე (გაშვებისთანავე ავტოწაკითხვა)."""
         gdb = self.gdb_var.get().strip()
         if not os.path.exists(gdb):
-            messagebox.showerror(self.tr("err"), self.tr("err_gdb"))
+            if not silent:
+                messagebox.showerror(self.tr("err"), self.tr("err_gdb"))
             return
         try:
             layers = [row[0] for row in pyogrio.list_layers(gdb)]
             if not layers:
-                messagebox.showwarning(self.tr("empty_title"), self.tr("no_layers"))
+                if not silent:
+                    messagebox.showwarning(self.tr("empty_title"), self.tr("no_layers"))
                 return
-            self.layer_combo["values"] = layers
-            if self.layer_var.get() not in layers:
-                self.layer_var.set(layers[0])
-            self._load_fields()
-            self._log(self.tr("log_layers", layers=", ".join(layers)))
+            # ჩამონათვალში კოდის გვერდით რეგიონი: „R02 — ქვემო ქართლი“
+            displays = [self._layer_display(l) for l in layers]
+            self.layer_combo["values"] = displays       # ყველა შრე
+            # ნაგულისხმევის შენარჩუნება ნამდვილი სახელით (და არა display-ით)
+            cur = self._layer_code(self.layer_var.get())
+            match = next((d for d, l in zip(displays, layers) if l == cur), None)
+            self.layer_var.set(match or displays[0])
+            self._load_fields(silent=silent)
+            self._log(self.tr("log_layers", layers=", ".join(displays)))
         except Exception as e:
-            messagebox.showerror(self.tr("err"), str(e))
+            if not silent:
+                messagebox.showerror(self.tr("err"), str(e))
 
-    def _load_fields(self):
+    @staticmethod
+    def _layer_display(raw):
+        """შრის სახელი ჩამონათვალისთვის: „R02 — ქვემო ქართლი“ (თუ რეგიონია)."""
+        name = region_name(raw)
+        return f"{raw} — {name}" if name else raw
+
+    @staticmethod
+    def _layer_code(display):
+        """ჩამონათვალის ჩანაწერიდან შრის ნამდვილი სახელი (რეგიონის სუფიქსის გარეშე)."""
+        return display.split(" — ", 1)[0].strip() if display else display
+
+    def _load_fields(self, silent=False):
         gdb = self.gdb_var.get().strip()
-        layer = self.layer_var.get().strip()
+        layer = self._layer_code(self.layer_var.get().strip())
         try:
             info = pyogrio.read_info(gdb, layer=layer)
             fields = list(info["fields"])
@@ -470,7 +568,8 @@ class ParcelSearchTool(ToolFrame):
                 guess = next((f for f in fields if "CAD" in f.upper()), fields[0] if fields else "")
                 self.field_var.set(guess)
         except Exception as e:
-            messagebox.showerror(self.tr("err"), str(e))
+            if not silent:
+                messagebox.showerror(self.tr("err"), str(e))
 
     # ---- შეყვანის დამხმარეები ----
     def _load_file(self):
@@ -530,7 +629,7 @@ class ParcelSearchTool(ToolFrame):
         if self.searching:
             return
         gdb = self.gdb_var.get().strip()
-        layer = self.layer_var.get().strip()
+        layer = self._layer_code(self.layer_var.get().strip())   # ნამდვილი შრის სახელი
         field = self.field_var.get().strip()
         out_path = self.out_var.get().strip()
 

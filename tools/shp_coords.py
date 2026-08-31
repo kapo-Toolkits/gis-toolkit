@@ -481,8 +481,9 @@ class ShpCoordsTool(ToolFrame):
     def _write_workbook(self, path, sheet_name, points, value_type,
                         template, angle_on, angle_all):
         from openpyxl import Workbook
-        from openpyxl.styles import Alignment, Font, Border, Side
+        from openpyxl.styles import Alignment, Font
         from openpyxl.utils import get_column_letter
+        from tools.xlsx_format import write_block, write_title
 
         wb = Workbook()
         ws = wb.active
@@ -490,10 +491,6 @@ class ShpCoordsTool(ToolFrame):
 
         bold = Font(bold=True)
         hcenter = Alignment(horizontal="center")
-        center = Alignment(horizontal="center", vertical="center")
-        wrap = Alignment(horizontal="center", vertical="center", wrap_text=True)
-        thin = Side(style="thin", color="000000")
-        border = Border(left=thin, right=thin, top=thin, bottom=thin)
 
         # --- ნედლი ბლოკი A:D (FID, Id, POINT_X, POINT_Y) — ხელუხლებელი ---
         for c, name in enumerate(["FID", "Id", "POINT_X", "POINT_Y"], 1):
@@ -506,74 +503,34 @@ class ShpCoordsTool(ToolFrame):
             ws.cell(row=2 + i, column=3, value=float(x))               # სრული სიზუსტე
             ws.cell(row=2 + i, column=4, value=float(y))
 
-        # --- გასუფთავებული ასლი E-დან ---
+        # --- გასუფთავებული ასლი (გაზიარებული ფორმატირებით) ---
         col = COPY_COL
         ncols = 4 if angle_on else 3
-        # ასლის სვეტების სიგანე (გამოიყენება ქუდის სიმაღლის დასათვლელადაც).
-        # „გადაკვეთის კუთხე“ — უფრო ფართო, რომ სათაური კომფორტულად ჩაჯდეს.
+        # ასლის სვეტების სიგანე („გადაკვეთის კუთხე“ უფრო ფართო).
         copy_widths = [max(4, len(str(len(points)))) + 2, 14, 14] + ([22] if angle_on else [])
 
         if template:
-            # ქუდი — 3 რიგის სიმაღლის, სვეტების სიგანის merge & center ბლოკი,
-            # wrap text-ით, Sylfaen ფონტით და all-borders-ით.
-            end_row = TITLE_ROW + TITLE_ROWS - 1
-            end_col = col + ncols - 1
-            ws.merge_cells(start_row=TITLE_ROW, start_column=col,
-                           end_row=end_row, end_column=end_col)
-            t = ws.cell(row=TITLE_ROW, column=col, value=template)
-            t.font = Font(name=TITLE_FONT, bold=True, size=11)
-            t.alignment = wrap
-            # all borders — merge-ის შემდეგ დიაპაზონის იტერაციით (openpyxl სწორად
-            # ინახავს გარე ჩარჩოს კიდეებს; შიდა ხაზები merge-ში ისედაც არ ჩანს).
-            for rr in range(TITLE_ROW, end_row + 1):
-                for cc in range(col, end_col + 1):
-                    ws.cell(row=rr, column=cc).border = border
-            # რიგის სიმაღლე ტექსტის საჭიროებისამებრ — რომ ნორმალურად ჩაჯდეს
-            self._fit_title_rows(ws, template, TITLE_ROW, TITLE_ROWS,
-                                 sum(copy_widths))
-            header_row = TITLE_ROW + TITLE_ROWS      # 6 + 3 = 9
+            end_row = write_title(ws, template, TITLE_ROW, col, ncols,
+                                  rows=TITLE_ROWS, font_name=TITLE_FONT,
+                                  total_width_chars=sum(copy_widths))
+            header_row = end_row + 1                  # 8 + 1 = 9
         else:
             header_row = HEADER_ROW_NO_TITLE
 
         headers = ["№", "X", "Y"] + ([self.tr("angle_hdr")] if angle_on else [])
-        for j, name in enumerate(headers):
-            cell = ws.cell(row=header_row, column=col + j, value=name)
-            cell.font = bold
-            cell.alignment = center
-            cell.border = border
-
+        rows = []
         for i, (idv, x, y) in enumerate(points, 1):
-            r = header_row + i
             xv = int(round(x)) if value_type == "int" else float(x)
             yv = int(round(y)) if value_type == "int" else float(y)
-            for j, val in enumerate((i, xv, yv)):
-                cell = ws.cell(row=r, column=col + j, value=val)
-                cell.alignment = center
-                cell.border = border
-            if angle_on:
-                cell = ws.cell(row=r, column=col + 3, value=angle_all)
-                cell.alignment = center
-                cell.border = border
-                cell.number_format = ANGLE_FMT          # რიცხვს გრადუსით აჩვენებს
+            rows.append([i, xv, yv] + ([angle_all] if angle_on else []))
 
-        # --- სვეტების სიგანე ---
+        write_block(ws, header_row, col, headers, rows,
+                    angle_index=(3 if angle_on else None),
+                    angle_fmt=ANGLE_FMT, col_widths=copy_widths)
+
+        # A:D სვეტების სიგანე
         for c in range(1, 5):
             ws.column_dimensions[get_column_letter(c)].width = 14
-        for j, w in enumerate(copy_widths):
-            ws.column_dimensions[get_column_letter(col + j)].width = w
 
         ws.freeze_panes = "A2"
         wb.save(path)
-
-    @staticmethod
-    def _fit_title_rows(ws, text, first_row, n_rows, total_width_chars):
-        """ქუდის რიგების სიმაღლე ტექსტის სიგრძის მიხედვით — რომ wrap-ული
-        ტექსტი merge-ბლოკში ნორმალურად ჩაჯდეს (merge-ს Excel ავტომატურად
-        არ უსწორებს სიმაღლეს)."""
-        import math
-        per_line = max(10, int(total_width_chars) - 2)     # დაახლ. სიმბოლო/ხაზზე
-        lines = max(1, math.ceil(len(str(text)) / per_line))
-        needed = lines * 15.0 + 8                           # საჭირო სიმაღლე (pt)
-        per_row = max(16.0, needed / n_rows)
-        for r in range(first_row, first_row + n_rows):
-            ws.row_dimensions[r].height = per_row

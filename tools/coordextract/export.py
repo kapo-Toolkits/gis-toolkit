@@ -3,33 +3,14 @@
 from __future__ import annotations
 
 import csv
-import re
 import json
 from typing import Iterable, List, Sequence, Tuple
 
+# გაზიარებული Excel-ფორმატირება (clean_number/write_block სუფთაა openpyxl-ის
+# იმპორტისგან; openpyxl მხოლოდ write_block-ის შიგნით ჩაიტვირთება).
+from tools.xlsx_format import clean_number, write_block
 
-def _clean_number(v):
-    """Turn a possibly messy cell into a plain number, free of errors.
-
-    Strips spaces, letters and stray symbols (OCR noise), treats comma as the
-    decimal separator, and returns int when whole. Returns None if nothing
-    numeric is left."""
-    if v is None:
-        return None
-    if isinstance(v, (int, float)):
-        return int(v) if float(v).is_integer() else v
-    s = str(v).strip().replace(",", ".")
-    s = re.sub(r"[^0-9.\-]", "", s)          # drop spaces/letters/symbols
-    if s in ("", "-", ".", "-."):
-        return None
-    try:
-        f = float(s)
-    except ValueError:
-        m = re.search(r"-?\d+(?:\.\d+)?", s)
-        if not m:
-            return None
-        f = float(m.group())
-    return int(f) if f.is_integer() else f
+_clean_number = clean_number   # backward-compat alias
 
 
 def format_xlsx(path: str, out_path: str | None = None,
@@ -46,8 +27,6 @@ def format_xlsx(path: str, out_path: str | None = None,
     Returns (saved_path, number_of_rows).
     """
     from openpyxl import load_workbook
-    from openpyxl.styles import Alignment, Font, Border, Side
-    from openpyxl.utils import get_column_letter
 
     wb = load_workbook(path)
     ws = wb.active
@@ -68,33 +47,15 @@ def format_xlsx(path: str, out_path: str | None = None,
     start_col = ORIG_COLS + 2                 # 3 + 2 = 5 (E)
     start_row = 6
 
-    thin = Side(style="thin", color="000000")
-    border = Border(left=thin, right=thin, top=thin, bottom=thin)
-    center = Alignment(horizontal="center", vertical="center")
-    bold = Font(bold=True)
+    rows = [(i, clean_number(x), clean_number(y))
+            for i, (x, y) in enumerate(data, start=1)]
 
-    # სათაური
-    for j, name in enumerate(header):
-        cell = ws.cell(row=start_row, column=start_col + j, value=name)
-        cell.font = bold
-        cell.alignment = center
-        cell.border = border
+    # სვეტების სიგანე (base + 4)
+    wx = max([7] + [len(str(clean_number(x))) for x, _ in data])
+    wy = max([7] + [len(str(clean_number(y))) for _, y in data])
+    col_widths = [len(str(header[0])) + 4, wx + 4, wy + 4]
 
-    # მონაცემები — ნუმერაცია თანმიმდევრული, X/Y გასუფთავებული
-    for i, (x, y) in enumerate(data, start=1):
-        rr = start_row + i
-        for j, val in enumerate((i, _clean_number(x), _clean_number(y))):
-            cell = ws.cell(row=rr, column=start_col + j, value=val)
-            cell.alignment = center
-            cell.border = border
-
-    # სვეტების სიგანე
-    widths = [len(str(header[0]))] + [7, 7]
-    for x, y in data:
-        widths[1] = max(widths[1], len(str(_clean_number(x))))
-        widths[2] = max(widths[2], len(str(_clean_number(y))))
-    for j, w in enumerate(widths):
-        ws.column_dimensions[get_column_letter(start_col + j)].width = w + 4
+    write_block(ws, start_row, start_col, header, rows, col_widths=col_widths)
 
     save = out_path or path
     wb.save(save)

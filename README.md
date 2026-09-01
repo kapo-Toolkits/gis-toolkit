@@ -17,6 +17,7 @@ The UI is **bilingual** — Georgian / English (top-bar switch).
 | **კოორდინატების ამომღები** / Coordinate extractor | რუკის სურათიდან/PDF-იდან ამოიღებს კოორდინატების ცხრილს (OCR) ან გეო-რეფერენსით ითვლის პოლიგონის წვეროებსა და ფართობს; Excel-ში გატანა და ფორმატირება. |
 | **სახელების გადარქმევა** / Rename → Latin | საქაღალდის ქართულ-სახელიან shapefile-ებს გადაარქმევს ლათინურად (სფეისი/სიმბოლო → `_`), წინასწარი სიით. ასევე ამოწმებს რომელ shapefile-ში დევს მასალა და რომელი ცარიელია. |
 | **Shp → კოორდინატები** / Shp → coordinates | წერტილოვანი shapefile-იდან კითხულობს X/Y-ს UTM ზონით (37/38, .prj-დან ან ხელით), წინასწარი ცხრილით; გააქვს დაფორმატებულ Excel-ში — ტექსტური ქუდი, `№/X/Y`, არჩევითი „გადაკვეთის კუთხე“ (°), center+borders. **Batch** — საქაღალდის ყველა წერტილოვანი shapefile ერთბაშად. |
+| **GDB → PostGIS** / GDB → PostGIS | ატანს ESRI Geodatabase-ის (`.gdb`/`.mdb`) შრეებს PostgreSQL/PostGIS-ში `ogr2ogr`-ით — შრეების არჩევა, კავშირის შემოწმება, რეჟიმები (overwrite/append/update), რეპროექცია. სჭირდება GDAL (QGIS/OSGeo4W) და PostGIS ბაზა. |
 
 ---
 
@@ -61,6 +62,12 @@ pip install -r requirements.txt
 თუ პაკეტი აკლია, GIS_BOX მაინც გაიხსნება — შესაბამისი ხელსაწყო უბრალოდ შეცდომას აჩვენებს.
 If a package is missing, GIS_BOX still opens — the affected tool just shows an error.
 
+**GDB → PostGIS** ხელსაწყოს pip-პაკეტი არ სჭირდება, მაგრამ სისტემაში უნდა იყოს
+GDAL-ის `ogr2ogr`/`ogrinfo` (მაგ. QGIS ან OSGeo4W) და ხელმისაწვდომი PostgreSQL/PostGIS ბაზა.
+
+The **GDB → PostGIS** tool needs no pip package, but requires GDAL's `ogr2ogr`/`ogrinfo`
+on the system (e.g. QGIS or OSGeo4W) and a reachable PostgreSQL/PostGIS database.
+
 ---
 
 ## კონფიგურაცია / Configuration
@@ -100,6 +107,8 @@ GIS_BOX/
 │  ├─ parcel_search.py       # ნაკვეთის ძებნა (მრავალი ბაზა)
 │  ├─ rename_transliterate.py# სახელების გადარქმევა + მასალის შემოწმება
 │  ├─ shp_coords.py          # Shp → კოორდინატები (Excel, batch)
+│  ├─ gdb2postgis.py         # GDB → PostGIS (tkinter UI)
+│  ├─ gdb2postgis_core.py    # ↳ ძრავა (ogr2ogr, GUI-free; MIT, vendored)
 │  ├─ coord_tool.py          # კოორდინატების ამომღების wrapper
 │  ├─ coordextract/          # OCR + გეო-რეფერენსის პაკეტი
 │  ├─ translit.py            # ქართული→ლათინური (სუფთა ლოგიკა)

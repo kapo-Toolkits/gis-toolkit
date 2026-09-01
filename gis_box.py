@@ -87,6 +87,7 @@ TR = {
     "coord_name":   {"en": "Coord. extractor",     "ka": "კოორდ. ამომღები"},
     "rename_name":  {"en": "Rename → Latin",       "ka": "სახელების გადარქმევა"},
     "shpcoord_name":{"en": "Shp → coordinates",     "ka": "Shp → კოორდინატები"},
+    "gdb2pg_name":  {"en": "GDB → PostGIS",         "ka": "GDB → PostGIS"},
     "tool_load_err":{"en": "This tool could not be loaded.",
                      "ka": "ეს ინსტრუმენტი ვერ ჩაიტვირთა."},
     "tool_dep_hint":{"en": "A required package is probably missing. Install:",
@@ -405,6 +406,10 @@ class GisBoxApp(tk.Tk):
             "name_en": TR["shpcoord_name"]["en"], "name_ka": TR["shpcoord_name"]["ka"],
             "factory": self._make_shpcoord_tool,
         })
+        specs.append({
+            "name_en": TR["gdb2pg_name"]["en"], "name_ka": TR["gdb2pg_name"]["ka"],
+            "factory": self._make_gdb2pg_tool,
+        })
         return specs
 
     def _make_parcel_tool(self, master):
@@ -422,6 +427,10 @@ class GisBoxApp(tk.Tk):
     def _make_shpcoord_tool(self, master):
         from tools.shp_coords import ShpCoordsTool
         return ShpCoordsTool(master, self)
+
+    def _make_gdb2pg_tool(self, master):
+        from tools.gdb2postgis import Gdb2PostgisTool
+        return Gdb2PostgisTool(master, self)
 
     def _instantiate_tool(self, idx):
         """ხელსაწყოს frame-ის შექმნა; შეცდომისას — მეგობრული error frame."""

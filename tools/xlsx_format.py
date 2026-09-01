@@ -16,6 +16,24 @@ import math
 DEGREE_FMT = '0"°"'   # კუთხის ფორმატი — მთელი რიცხვი + გრადუსი (წერტილის გარეშე)
 
 
+class FileLockedError(Exception):
+    """.xlsx ვერ შეინახა — ფაილი ალბათ Excel-ში (ან სხვა პროგრამაში) გახსნილია.
+
+    UI-ს გამოაქვს გასაგები შეტყობინება „დახურე ფაილი და სცადე ხელახლა“."""
+
+    def __init__(self, path):
+        super().__init__(path)
+        self.path = path
+
+
+def save_workbook(wb, path):
+    """openpyxl-ის workbook-ის შენახვა; ჩაკეტილ ფაილზე — FileLockedError."""
+    try:
+        wb.save(path)
+    except PermissionError as e:
+        raise FileLockedError(path) from e
+
+
 def clean_number(v):
     """მოსახერხებელ რიცხვად გადაქცევა, შეცდომებისგან თავისუფალი.
 

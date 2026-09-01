@@ -21,6 +21,7 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox, simpledialog
 
 from tools.base import ToolFrame
+from tools.xlsx_format import FileLockedError, save_workbook
 
 # ცნობილი სახელის ნიმუშები, რომლებსაც ავტომატურად ვირჩევთ
 AUTO_PATTERNS = ("gas_pipe_crossing", "gas_pipe_protzone_crossing", "crossing")
@@ -104,6 +105,10 @@ RTR = {
                   "ka": "გაიტანა {n} წერტილი → {path}"},
     "save_title":{"en": "Save Excel", "ka": "Excel-ის შენახვა"},
     "err":       {"en": "Error", "ka": "შეცდომა"},
+    "file_locked":{"en": "Could not save — the file is open in Excel. "
+                         "Close it and try again.",
+                   "ka": "ვერ შეინახა — ფაილი Excel-ში გახსნილია. "
+                         "დახურე და სცადე ხელახლა."},
     "load_err":  {"en": "Could not read the shapefile:",
                   "ka": "shapefile ვერ წაიკითხა:"},
 }
@@ -454,6 +459,9 @@ class ShpCoordsTool(ToolFrame):
                 path, sheet_name=os.path.basename(shp), points=points,
                 value_type=vtype, template=template,
                 angle_on=angle_on, angle_all=angle_all)
+        except FileLockedError:
+            messagebox.showerror(self.tr("err"), self.tr("file_locked"))
+            return
         except Exception as e:
             messagebox.showerror(self.tr("err"), str(e))
             return
@@ -514,6 +522,9 @@ class ShpCoordsTool(ToolFrame):
                 self.app.log(f"✓ {base}.xlsx ({len(points)})")
                 self._last_xlsx = outpath
                 ok += 1
+            except FileLockedError:
+                self.app.log(f"✗ {name}: {self.tr('file_locked')}")
+                skipped += 1
             except Exception as e:
                 self.app.log(f"✗ {name}: {e}")
                 skipped += 1
@@ -574,7 +585,10 @@ class ShpCoordsTool(ToolFrame):
                 cell.number_format = ANGLE_FMT
                 n += 1
         try:
-            wb.save(path)
+            save_workbook(wb, path)
+        except FileLockedError:
+            messagebox.showerror(self.tr("err"), self.tr("file_locked"))
+            return
         except Exception as e:
             messagebox.showerror(self.tr("err"), str(e))
             return
@@ -641,4 +655,4 @@ class ShpCoordsTool(ToolFrame):
             ws.column_dimensions[get_column_letter(c)].width = 14
 
         ws.freeze_panes = "A2"
-        wb.save(path)
+        save_workbook(wb, path)

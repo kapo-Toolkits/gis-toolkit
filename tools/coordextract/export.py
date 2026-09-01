@@ -8,7 +8,7 @@ from typing import Iterable, List, Sequence, Tuple
 
 # გაზიარებული Excel-ფორმატირება (clean_number/write_block სუფთაა openpyxl-ის
 # იმპორტისგან; openpyxl მხოლოდ write_block-ის შიგნით ჩაიტვირთება).
-from tools.xlsx_format import clean_number, write_block
+from tools.xlsx_format import clean_number, write_block, save_workbook
 
 _clean_number = clean_number   # backward-compat alias
 
@@ -58,7 +58,7 @@ def format_xlsx(path: str, out_path: str | None = None,
     write_block(ws, start_row, start_col, header, rows, col_widths=col_widths)
 
     save = out_path or path
-    wb.save(save)
+    save_workbook(wb, save)
     return save, len(data)
 
 
@@ -129,4 +129,4 @@ def rows_to_xlsx(path: str, rows: Sequence[Tuple[str, object, object]],
         ws.cell(row=len(rows) + 3, column=1, value=note)
 
     ws.freeze_panes = "A2"
-    wb.save(path)
+    save_workbook(wb, path)

@@ -338,8 +338,6 @@ class GisBoxApp(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("GIS_BOX")
-        # უფრო დიდი ნაგულისხმევი ზომა — ჩაშენებული ხელსაწყოებისთვის (რუკის canvas, ცხრილები)
-        self.geometry("1180x760")
         self.minsize(860, 560)
         try:                       # ფანჯრის ხატულა (Windows-ზე .ico)
             self.iconbitmap(os.path.join(APP_DIR, "gis_box.ico"))
@@ -353,11 +351,17 @@ class GisBoxApp(tk.Tk):
         # per-tool მუდმივი კონფიგურაცია (მაგ. GDB გზა) — ინახება პარამეტრების
         # ფაილში (git-ignored), ამიტომ სენსიტიური გზები კოდში/რეპოში არ ხვდება.
         self.tool_config = {}
+        self.current_tool = 0        # ბოლო არჩეული ხელსაწყო (settings-იდან)
+        self.win_geometry = ""       # ბოლო ფანჯრის ზომა/პოზიცია
         self.load_settings()
+
+        # უფრო დიდი ნაგულისხმევი ზომა — ჩაშენებული ხელსაწყოებისთვის (რუკა, ცხრილები);
+        # თუ წინა სესიის ზომა შენახულია — ვიყენებთ მას.
+        self.geometry(self.win_geometry or "1180x760")
+        self.protocol("WM_DELETE_WINDOW", self._on_close)
 
         # transient state (rebuild-ს გადაურჩება) — თითო ინსტრუმენტზე id-ით
         self.tool_state = {}
-        self.current_tool = 0
         self.log_lines = []
 
         # ხელსაწყოების რეესტრი (lazy — frame იქმნება პირველ არჩევაზე)
@@ -459,18 +463,37 @@ class GisBoxApp(tk.Tk):
             self.theme = s.get("theme", self.theme)
             self.source_dir = s.get("source_dir", self.source_dir)
             self.tool_config = s.get("tool_config", self.tool_config)
+            self.current_tool = s.get("current_tool", self.current_tool)
+            self.win_geometry = s.get("geometry", self.win_geometry)
         except (OSError, ValueError):
             pass
 
     def save_settings(self):
         try:
+            geom = self.win_geometry
+            try:                       # ცოცხალი ფანჯრის მიმდინარე ზომა/პოზიცია
+                if self.winfo_exists():
+                    geom = self.geometry()
+            except tk.TclError:
+                pass
             with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
                 json.dump({"lang": self.lang, "theme": self.theme,
                            "source_dir": self.source_dir,
-                           "tool_config": self.tool_config}, f,
+                           "tool_config": self.tool_config,
+                           "current_tool": self.current_tool,
+                           "geometry": geom}, f,
                           ensure_ascii=False, indent=2)
         except OSError:
             pass
+
+    def _on_close(self):
+        """დახურვისას — ფანჯრის ზომა/პოზიცია და ბოლო ხელსაწყო შენახვა."""
+        try:
+            self.win_geometry = self.geometry()
+        except tk.TclError:
+            pass
+        self.save_settings()
+        self.destroy()
 
     # --- per-tool მუდმივი კონფიგურაცია ---
     def get_tool_config(self, tool_id):

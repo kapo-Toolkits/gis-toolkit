@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
 """ტესტები — გაზიარებული Excel-ფორმატირება (write_block / write_title)."""
 
+import pytest
 from openpyxl import Workbook
 
-from tools.xlsx_format import write_block, write_title, clean_number, DEGREE_FMT
+from tools.xlsx_format import (write_block, write_title, clean_number, DEGREE_FMT,
+                               save_workbook, FileLockedError)
 
 
 def test_write_block_basic():
@@ -53,3 +55,19 @@ def test_write_title_merge_and_border():
 def test_clean_number_here():
     assert clean_number("4G98195") == 498195
     assert clean_number(None) is None
+
+
+def test_save_workbook_ok(tmp_path):
+    wb = Workbook(); wb.active["A1"] = "x"
+    out = tmp_path / "ok.xlsx"
+    save_workbook(wb, str(out))
+    assert out.exists()
+
+
+def test_save_workbook_locked_raises():
+    class _LockedWB:
+        def save(self, path):
+            raise PermissionError("file is open")
+    with pytest.raises(FileLockedError) as ei:
+        save_workbook(_LockedWB(), "busy.xlsx")
+    assert ei.value.path == "busy.xlsx"

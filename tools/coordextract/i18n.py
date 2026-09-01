@@ -126,6 +126,8 @@ TR = {
     "nothing_exp_title":{"en": "Nothing to export", "ka": "საექსპორტო არაფერია"},
     "nothing_exp":      {"en": "The table is empty.", "ka": "ცხრილი ცარიელია."},
     "export_failed":    {"en": "Export failed", "ka": "ექსპორტი ვერ მოხერხდა"},
+    "file_locked":      {"en": "Could not save — the file is open in Excel. Close it and try again.",
+                         "ka": "ვერ შეინახა — ფაილი Excel-ში გახსნილია. დახურე და სცადე ხელახლა."},
     "saved":            {"en": "Saved {name}", "ka": "შენახულია {name}"},
     "geo_note":         {"en": "coordinates via affine fit; verify against grid",
                          "ka": "კოორდინატები აფინური მორგებით; შეამოწმე ბადესთან"},

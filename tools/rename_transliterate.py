@@ -43,6 +43,12 @@ RTR = {
     "recursive": {"en": "Include subfolders", "ka": "ქვესაქაღალდეებიც"},
     "preview":   {"en": "Preview", "ka": "წინასწარი სია"},
     "rename":    {"en": "Rename", "ka": "გადარქმევა"},
+    "undo":      {"en": "↩ Undo", "ka": "↩ დაბრუნება"},
+    "undo_none": {"en": "Nothing to undo.", "ka": "დასაბრუნებელი არაფერია."},
+    "undo_confirm": {"en": "Undo the last rename ({n} file(s))?",
+                     "ka": "დავაბრუნო ბოლო გადარქმევა ({n} ფაილი)?"},
+    "undo_done": {"en": "Undone — restored {ok}, skipped {sk}.",
+                  "ka": "დაბრუნდა — აღდგა {ok}, გამოტოვდა {sk}."},
     "col_hint":  {"en": "old  →  new   (⚠ = will be skipped)",
                   "ka": "ძველი  →  ახალი   (⚠ = გამოტოვდება)"},
     "warn_folder": {"en": "Specify a valid folder.",
@@ -105,6 +111,7 @@ class RenameTransliterateTool(ToolFrame):
         st = self._state()
         saved = self.app.get_tool_config(self.tid)
         self._plan = []
+        self._undo = []          # ბოლო გადარქმევა: (ახალი_გზა, ძველი_გზა)
 
         ttk.Label(self, text=self.tr("heading"),
                   font=("Segoe UI", 13, "bold")).pack(anchor="w", pady=(0, 4))
@@ -128,6 +135,8 @@ class RenameTransliterateTool(ToolFrame):
         ttk.Button(opt, text=self.tr("preview"), command=self._preview).pack(
             side="left", padx=(16, 4))
         ttk.Button(opt, text=self.tr("rename"), command=self._rename).pack(side="left")
+        ttk.Button(opt, text=self.tr("undo"), command=self._undo_rename).pack(
+            side="left", padx=(4, 0))
 
         # --- ცალკე მდგომი ფუნქცია: მასალის (ცარიელობის) შემოწმება ---
         ttk.Separator(self, orient="horizontal").pack(fill="x", pady=(4, 6))
@@ -277,11 +286,13 @@ class RenameTransliterateTool(ToolFrame):
 
         ok = 0
         skipped = len(self._plan) - len(doable)
+        self._undo = []          # ახალი პარტია — წინა undo იშლება
         for it in doable:
             src = os.path.join(it["dir"], it["old"])
             dst = os.path.join(it["dir"], it["new"])
             try:
                 os.rename(src, dst)
+                self._undo.append((dst, src))     # დასაბრუნებლად: ახალი → ძველი
                 self.app.log(f"✓ {it['old']} → {it['new']}")
                 ok += 1
             except OSError as e:
@@ -293,3 +304,33 @@ class RenameTransliterateTool(ToolFrame):
         # გადარქმევის შემდეგ სია განახლდეს
         self._plan = self._build_plan(folder)
         self._show_plan()
+
+    def _undo_rename(self):
+        """ბოლო გადარქმევის დაბრუნება — ახალ სახელებს ძველზე გადაარქმევს."""
+        if not self._undo:
+            messagebox.showinfo("GIS_BOX", self.tr("undo_none"))
+            return
+        if not messagebox.askyesno("GIS_BOX",
+                                   self.tr("undo_confirm", n=len(self._undo))):
+            return
+        ok = skipped = 0
+        for new_path, old_path in reversed(self._undo):
+            # უსაფრთხოება: ახალი უნდა არსებობდეს, ძველი — არა (რომ არ გადავაწეროთ)
+            if not os.path.exists(new_path) or os.path.exists(old_path):
+                self.app.log(f"↷ {os.path.basename(new_path)}")
+                skipped += 1
+                continue
+            try:
+                os.rename(new_path, old_path)
+                self.app.log(f"↩ {os.path.basename(new_path)} → {os.path.basename(old_path)}")
+                ok += 1
+            except OSError as e:
+                self.app.log(f"✗ {os.path.basename(new_path)}: {e}")
+                skipped += 1
+        self._undo = []
+        self.app.log("— " + self.tr("undo_done", ok=ok, sk=skipped))
+        messagebox.showinfo("GIS_BOX", self.tr("undo_done", ok=ok, sk=skipped))
+        folder = self.folder_var.get().strip()
+        if folder and os.path.isdir(folder):
+            self._plan = self._build_plan(folder)
+            self._show_plan()

@@ -29,6 +29,7 @@ from . import capture, export
 from .georef import ControlPoint, GeoReferenceError, fit_affine, polygon_area
 from .ocr import OCRUnavailable, available_backends, extract_table
 from .i18n import make_tr
+from ..xlsx_format import FileLockedError
 
 
 class CoordExtractorApp:
@@ -585,6 +586,9 @@ class CoordExtractorApp:
             else:
                 extra = {"crs_note": geo_note} if geo_note else None
                 export.rows_to_json(path, rows, extra=extra)
+        except FileLockedError:
+            messagebox.showerror(self.tr("export_failed"), self.tr("file_locked"))
+            return
         except Exception as e:
             messagebox.showerror(self.tr("export_failed"), str(e))
             return
@@ -605,6 +609,9 @@ class CoordExtractorApp:
             return
         try:
             _saved, n = export.format_xlsx(path)
+        except FileLockedError:
+            messagebox.showerror(self.tr("format_failed"), self.tr("file_locked"))
+            return
         except Exception as e:
             messagebox.showerror(self.tr("format_failed"), str(e))
             return

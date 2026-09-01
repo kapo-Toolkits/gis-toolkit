@@ -142,35 +142,56 @@ class Gdb2PostgisTool(ToolFrame):
         def cfg(key, default=""):
             return saved.get(key, default)
 
-        ttk.Label(self, text=self.tr("heading"),
+        # --- სქროლადი content (ხელსაწყო ფანჯარაზე მაღალია) ---
+        canvas = tk.Canvas(self, highlightthickness=0, bg=pal["bg"])
+        vbar = ttk.Scrollbar(self, orient="vertical", command=canvas.yview)
+        canvas.configure(yscrollcommand=vbar.set)
+        vbar.pack(side="right", fill="y")
+        canvas.pack(side="left", fill="both", expand=True)
+        body = ttk.Frame(canvas)
+        win_id = canvas.create_window((0, 0), window=body, anchor="nw")
+        body.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.bind("<Configure>", lambda e: canvas.itemconfigure(win_id, width=e.width))
+
+        def _wheel(e):
+            step = 1 if (getattr(e, "num", 0) == 5 or getattr(e, "delta", 0) < 0) else -1
+            canvas.yview_scroll(step, "units")
+        canvas.bind("<Enter>", lambda e: (canvas.bind_all("<MouseWheel>", _wheel),
+                                          canvas.bind_all("<Button-4>", _wheel),
+                                          canvas.bind_all("<Button-5>", _wheel)))
+        canvas.bind("<Leave>", lambda e: (canvas.unbind_all("<MouseWheel>"),
+                                          canvas.unbind_all("<Button-4>"),
+                                          canvas.unbind_all("<Button-5>")))
+
+        ttk.Label(body, text=self.tr("heading"),
                   font=("Segoe UI", 13, "bold")).grid(row=0, column=0, columnspan=4, sticky="w")
-        ttk.Label(self, text=self.tr("desc"), foreground=pal["muted"],
+        ttk.Label(body, text=self.tr("desc"), foreground=pal["muted"],
                   wraplength=680, justify="left").grid(
             row=1, column=0, columnspan=4, sticky="w", pady=(0, 10))
 
         # --- GDAL ---
-        ttk.Label(self, text=self.tr("gdal")).grid(row=2, column=0, sticky="w")
+        ttk.Label(body, text=self.tr("gdal")).grid(row=2, column=0, sticky="w")
         self.ogr2ogr_var = tk.StringVar(value=cfg("ogr2ogr"))
-        ttk.Entry(self, textvariable=self.ogr2ogr_var).grid(
+        ttk.Entry(body, textvariable=self.ogr2ogr_var).grid(
             row=2, column=1, columnspan=2, sticky="ew", padx=6)
-        ttk.Button(self, text=self.tr("browse"), command=self._pick_ogr).grid(row=2, column=3, sticky="ew")
-        self.gdal_status = ttk.Label(self, text="", foreground=pal["muted"])
+        ttk.Button(body, text=self.tr("browse"), command=self._pick_ogr).grid(row=2, column=3, sticky="ew")
+        self.gdal_status = ttk.Label(body, text="", foreground=pal["muted"])
         self.gdal_status.grid(row=3, column=1, columnspan=3, sticky="w", pady=(0, 8))
 
         # --- Source ---
-        ttk.Label(self, text=self.tr("source_dir")).grid(row=4, column=0, sticky="w")
+        ttk.Label(body, text=self.tr("source_dir")).grid(row=4, column=0, sticky="w")
         self.dir_var = tk.StringVar(value=cfg("source_dir"))
-        ttk.Entry(self, textvariable=self.dir_var).grid(row=4, column=1, columnspan=2, sticky="ew", padx=6)
-        ttk.Button(self, text=self.tr("browse"), command=self._pick_dir).grid(row=4, column=3, sticky="ew")
+        ttk.Entry(body, textvariable=self.dir_var).grid(row=4, column=1, columnspan=2, sticky="ew", padx=6)
+        ttk.Button(body, text=self.tr("browse"), command=self._pick_dir).grid(row=4, column=3, sticky="ew")
 
-        ttk.Label(self, text=self.tr("source")).grid(row=5, column=0, sticky="w", pady=(6, 0))
+        ttk.Label(body, text=self.tr("source")).grid(row=5, column=0, sticky="w", pady=(6, 0))
         self.source_var = tk.StringVar()
-        self.source_combo = ttk.Combobox(self, textvariable=self.source_var, state="readonly")
+        self.source_combo = ttk.Combobox(body, textvariable=self.source_var, state="readonly")
         self.source_combo.grid(row=5, column=1, columnspan=3, sticky="ew", padx=6, pady=(6, 0))
         self.source_combo.bind("<<ComboboxSelected>>", lambda e: self._load_layers())
 
         # --- Layers ---
-        lay = ttk.Frame(self)
+        lay = ttk.Frame(body)
         lay.grid(row=6, column=0, columnspan=4, sticky="nsew", pady=(8, 8))
         ttk.Label(lay, text=self.tr("layers")).pack(anchor="w")
         box = ttk.Frame(lay)
@@ -190,7 +211,7 @@ class Gdb2PostgisTool(ToolFrame):
                    command=lambda: self.layers_list.selection_clear(0, "end")).pack(side="left", padx=(4, 0))
 
         # --- PostGIS connection ---
-        conn = ttk.LabelFrame(self, text=self.tr("conn"), padding=8)
+        conn = ttk.LabelFrame(body, text=self.tr("conn"), padding=8)
         conn.grid(row=7, column=0, columnspan=4, sticky="ew", pady=(0, 8))
         self.host_var = tk.StringVar(value=cfg("host", "localhost"))
         self.port_var = tk.StringVar(value=str(cfg("port", "5432")))
@@ -213,7 +234,7 @@ class Gdb2PostgisTool(ToolFrame):
             row=3, column=2, columnspan=2, sticky="e", padx=4, pady=(4, 0))
 
         # --- Options ---
-        opts = ttk.LabelFrame(self, text=self.tr("opts"), padding=8)
+        opts = ttk.LabelFrame(body, text=self.tr("opts"), padding=8)
         opts.grid(row=8, column=0, columnspan=4, sticky="ew", pady=(0, 8))
         ttk.Label(opts, text=self.tr("mode")).grid(row=0, column=0, sticky="w", padx=4)
         self.mode_var = tk.StringVar(value=cfg("mode", "overwrite"))
@@ -233,7 +254,7 @@ class Gdb2PostgisTool(ToolFrame):
         ttk.Checkbutton(opts, text=self.tr("copy"), variable=self.copy_var).grid(row=2, column=3, sticky="w", padx=4)
 
         # --- Incremental sync ---
-        incr = ttk.LabelFrame(self, text=self.tr("incr_group"), padding=8)
+        incr = ttk.LabelFrame(body, text=self.tr("incr_group"), padding=8)
         incr.grid(row=9, column=0, columnspan=4, sticky="ew", pady=(0, 8))
         self.incr_var = tk.BooleanVar(value=cfg("incremental", False))
         ttk.Checkbutton(incr, text=self.tr("incr_enable"), variable=self.incr_var,
@@ -257,7 +278,7 @@ class Gdb2PostgisTool(ToolFrame):
             row=3, column=0, columnspan=4, sticky="w", padx=4, pady=(4, 0))
 
         # --- Scheduler (tkinter after(); no external dependency) ---
-        sched = ttk.LabelFrame(self, text=self.tr("sched_group"), padding=8)
+        sched = ttk.LabelFrame(body, text=self.tr("sched_group"), padding=8)
         sched.grid(row=10, column=0, columnspan=4, sticky="ew", pady=(0, 8))
         self.sched_var = tk.BooleanVar(value=cfg("sched_on", False))
         ttk.Checkbutton(sched, text=self.tr("sched_enable"), variable=self.sched_var,
@@ -281,7 +302,7 @@ class Gdb2PostgisTool(ToolFrame):
                   wraplength=660, justify="left").grid(row=2, column=0, columnspan=4, sticky="w", padx=4)
 
         # --- Actions ---
-        act = ttk.Frame(self)
+        act = ttk.Frame(body)
         act.grid(row=11, column=0, columnspan=4, sticky="ew")
         self.import_btn = ttk.Button(act, text=self.tr("import"), command=self._start_import)
         self.import_btn.pack(side="left")
@@ -289,11 +310,11 @@ class Gdb2PostgisTool(ToolFrame):
         self.cancel_btn.pack(side="left", padx=(6, 0))
         ttk.Button(act, text=self.tr("remember"), command=self._remember).pack(side="left", padx=(12, 0))
         ttk.Button(act, text=self.tr("history"), command=self._open_history).pack(side="left", padx=(6, 0))
-        self.progress = ttk.Progressbar(self, mode="indeterminate")
+        self.progress = ttk.Progressbar(body, mode="indeterminate")
         self.progress.grid(row=12, column=0, columnspan=4, sticky="ew", pady=(8, 0))
 
-        self.columnconfigure(1, weight=1)
-        self.rowconfigure(6, weight=1)
+        body.columnconfigure(1, weight=1)
+        body.rowconfigure(6, weight=1)
 
         self._sync = SyncState()          # ინკრემენტული watermark-ები (git-ignored)
         self._audit = AuditStore()        # გაშვებების ისტორია (git-ignored SQLite)

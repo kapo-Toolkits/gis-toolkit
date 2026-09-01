@@ -74,6 +74,19 @@ CATALOG = {
                       "ka": "ავტო-აღმოჩენისთვის მონიშნე ზუსტად ერთი შრე."},
     "auto_done": {"en": "Detected — key: {k}, change: {t}",
                   "ka": "აღმოჩენილია — key: {k}, ცვლილება: {t}"},
+    "sched_group": {"en": "Scheduler", "ka": "განრიგი"},
+    "sched_enable": {"en": "Run automatically every", "ka": "ავტომატურად ყოველ"},
+    "unit_min":  {"en": "minutes", "ka": "წუთი"},
+    "unit_hour": {"en": "hours", "ka": "საათი"},
+    "unit_day":  {"en": "days", "ka": "დღე"},
+    "sched_apply": {"en": "Apply", "ka": "გამოყენება"},
+    "next_run":  {"en": "Next run: {t}", "ka": "შემდეგი გაშვება: {t}"},
+    "sched_off": {"en": "Scheduler off.", "ka": "განრიგი გამორთულია."},
+    "sched_skip":{"en": "Scheduled run skipped (busy or no layers selected).",
+                  "ka": "განრიგის გაშვება გამოტოვდა (დაკავებული ან შრე არაა მონიშნული)."},
+    "sched_hint":{"en": "Uses the current source, selected layers and settings above.",
+                  "ka": "იყენებს მიმდინარე წყაროს, მონიშნულ შრეებსა და ზემოთ პარამეტრებს."},
+    "sched_fire":{"en": "— Scheduled run —", "ka": "— განრიგით გაშვება —"},
     "import":   {"en": "▶ Import", "ka": "▶ იმპორტი"},
     "cancel":   {"en": "✖ Cancel", "ka": "✖ გაუქმება"},
     "remember": {"en": "💾 Remember settings", "ka": "💾 პარამეტრების დამახსოვრება"},
@@ -221,25 +234,52 @@ class Gdb2PostgisTool(ToolFrame):
                   wraplength=660, justify="left").grid(
             row=3, column=0, columnspan=4, sticky="w", padx=4, pady=(4, 0))
 
+        # --- Scheduler (tkinter after(); no external dependency) ---
+        sched = ttk.LabelFrame(self, text=self.tr("sched_group"), padding=8)
+        sched.grid(row=10, column=0, columnspan=4, sticky="ew", pady=(0, 8))
+        self.sched_var = tk.BooleanVar(value=cfg("sched_on", False))
+        ttk.Checkbutton(sched, text=self.tr("sched_enable"), variable=self.sched_var,
+                        command=self._apply_schedule).grid(row=0, column=0, sticky="w", padx=4)
+        self.every_var = tk.StringVar(value=str(cfg("sched_every", "1")))
+        ttk.Spinbox(sched, from_=1, to=9999, width=6, textvariable=self.every_var).grid(
+            row=0, column=1, sticky="w", padx=4)
+        self._unit_map = {self.tr("unit_min"): "minutes",
+                          self.tr("unit_hour"): "hours", self.tr("unit_day"): "days"}
+        self.unit_var = tk.StringVar()
+        self.unit_combo = ttk.Combobox(sched, textvariable=self.unit_var, state="readonly",
+                                       width=10, values=list(self._unit_map))
+        self.unit_combo.grid(row=0, column=2, sticky="w", padx=4)
+        self._set_unit(cfg("sched_unit", "minutes"))
+        ttk.Button(sched, text=self.tr("sched_apply"), command=self._apply_schedule).grid(
+            row=0, column=3, sticky="w", padx=4)
+        self.next_run_var = tk.StringVar(value=self.tr("sched_off"))
+        ttk.Label(sched, textvariable=self.next_run_var,
+                  font=("Segoe UI", 9, "bold")).grid(row=1, column=0, columnspan=4, sticky="w", padx=4, pady=(4, 0))
+        ttk.Label(sched, text=self.tr("sched_hint"), foreground=pal["muted"],
+                  wraplength=660, justify="left").grid(row=2, column=0, columnspan=4, sticky="w", padx=4)
+
         # --- Actions ---
         act = ttk.Frame(self)
-        act.grid(row=10, column=0, columnspan=4, sticky="ew")
+        act.grid(row=11, column=0, columnspan=4, sticky="ew")
         self.import_btn = ttk.Button(act, text=self.tr("import"), command=self._start_import)
         self.import_btn.pack(side="left")
         self.cancel_btn = ttk.Button(act, text=self.tr("cancel"), command=self._cancel, state="disabled")
         self.cancel_btn.pack(side="left", padx=(6, 0))
         ttk.Button(act, text=self.tr("remember"), command=self._remember).pack(side="left", padx=(12, 0))
         self.progress = ttk.Progressbar(self, mode="indeterminate")
-        self.progress.grid(row=11, column=0, columnspan=4, sticky="ew", pady=(8, 0))
+        self.progress.grid(row=12, column=0, columnspan=4, sticky="ew", pady=(8, 0))
 
         self.columnconfigure(1, weight=1)
         self.rowconfigure(6, weight=1)
 
         self._sync = SyncState()          # ინკრემენტული watermark-ები (git-ignored)
+        self._sched_after_id = None       # scheduler-ის after()-callback
         self._refresh_gdal()
         self._toggle_incr()
         if self.dir_var.get():
             self._scan_sources()
+        if self.sched_var.get():          # წინა სესიის განრიგი ხელახლა ჩაირთოს
+            self._apply_schedule()
         self.after(100, self._poll)
 
     # ---- GDAL ----
@@ -354,6 +394,50 @@ class Gdb2PostgisTool(ToolFrame):
         self.track_var.set(track)
         self.app.log("— " + self.tr("auto_done", k=key or "?", t=track or "?"))
 
+    # ---- scheduler (tkinter after(); no external dependency) ----
+    def _set_unit(self, canonical):
+        for disp, u in self._unit_map.items():
+            if u == canonical:
+                self.unit_var.set(disp)
+                return
+        self.unit_var.set(next(iter(self._unit_map)))
+
+    def _interval_ms(self):
+        try:
+            n = max(1, int(self.every_var.get()))
+        except ValueError:
+            n = 1
+        unit = self._unit_map.get(self.unit_var.get(), "minutes")
+        return n * {"minutes": 60_000, "hours": 3_600_000, "days": 86_400_000}[unit]
+
+    def _apply_schedule(self):
+        if self._sched_after_id is not None:
+            self.after_cancel(self._sched_after_id)
+            self._sched_after_id = None
+        if not self.sched_var.get():
+            self.next_run_var.set(self.tr("sched_off"))
+            return
+        self._schedule_next(self._interval_ms())
+
+    def _schedule_next(self, ms):
+        from datetime import datetime, timedelta
+        nxt = datetime.now() + timedelta(milliseconds=ms)
+        self.next_run_var.set(self.tr("next_run", t=nxt.strftime("%Y-%m-%d %H:%M:%S")))
+        self._sched_after_id = self.after(ms, self._sched_tick)
+
+    def _sched_tick(self):
+        self._sched_after_id = None
+        if not self.winfo_exists() or not self.sched_var.get():
+            return
+        # overlap-ის გარეშე + საჭიროა მონიშნული წყარო/შრეები
+        if (not self.running and self._sources.get(self.source_var.get())
+                and self._selected_layers()):
+            self.app.log(self.tr("sched_fire"))
+            self._start_import()
+        else:
+            self.app.log("— " + self.tr("sched_skip"))
+        self._schedule_next(self._interval_ms())      # რესქედულა
+
     # ---- options / persistence ----
     def _opts(self):
         return core.ImportOptions(
@@ -373,6 +457,8 @@ class Gdb2PostgisTool(ToolFrame):
             "promote": self.promote_var.get(), "gist": self.gist_var.get(), "copy": self.copy_var.get(),
             "incremental": self.incr_var.get(), "key_field": self.key_var.get().strip(),
             "track_field": self.track_var.get().strip(), "detect_deletes": self.deletes_var.get(),
+            "sched_on": self.sched_var.get(), "sched_every": self.every_var.get().strip(),
+            "sched_unit": self._unit_map.get(self.unit_var.get(), "minutes"),
         }
         if self.remember_pw.get():          # პაროლი მხოლოდ თოლიის მონიშვნისას
             data["password"] = self.pw_var.get()

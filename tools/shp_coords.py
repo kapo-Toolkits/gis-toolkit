@@ -21,6 +21,7 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox, simpledialog
 
 from tools.base import ToolFrame
+from tools.tooltip import add_tip
 from tools.xlsx_format import FileLockedError, save_workbook
 
 # ცნობილი სახელის ნიმუშები, რომლებსაც ავტომატურად ვირჩევთ
@@ -118,6 +119,28 @@ RTR = {
                          "დახურე და სცადე ხელახლა."},
     "load_err":  {"en": "Could not read the shapefile:",
                   "ka": "shapefile ვერ წაიკითხა:"},
+
+    # tooltip-ები
+    "tip_browse": {"en": "Folder to search for point shapefiles.",
+                   "ka": "საქაღალდე წერტილოვანი shapefile-ების საძებნელად."},
+    "tip_rescan": {"en": "Re-scan the folder for point shapefiles.",
+                   "ka": "საქაღალდის ხელახლა სკანირება წერტილოვან shapefile-ებზე."},
+    "tip_shp":    {"en": "Choose the point shapefile to export.",
+                   "ka": "აირჩიე გასატანი წერტილოვანი shapefile."},
+    "tip_tmpl_add": {"en": "Add a new header (title) template.",
+                     "ka": "ახალი ტექსტური ქუდის დამატება."},
+    "tip_tmpl_del": {"en": "Delete the selected header template.",
+                     "ka": "არჩეული ტექსტური ქუდის წაშლა."},
+    "tip_angle":  {"en": "Add a “crossing angle” column formatted with ° (degrees).",
+                   "ka": "„გადაკვეთის კუთხე“ სვეტი ° (გრადუსი) ფორმატით."},
+    "tip_export": {"en": "Export the selected shapefile to a formatted Excel file.",
+                   "ka": "არჩეული shapefile-ის ექსპორტი დაფორმატებულ Excel-ში."},
+    "tip_preview":{"en": "Preview the coordinate table before export.",
+                   "ka": "კოორდინატების ცხრილის წინასწარ ნახვა ექსპორტამდე."},
+    "tip_batch":  {"en": "Export every point shapefile in the folder at once.",
+                   "ka": "საქაღალდის ყველა წერტილოვანი shapefile ერთბაშად."},
+    "tip_apply_deg": {"en": "Add ° to all numbers in the angle column of an Excel file.",
+                      "ka": "° დაუმატე კუთხის სვეტის ყველა რიცხვს Excel ფაილში."},
 }
 
 
@@ -155,7 +178,8 @@ class ShpCoordsTool(ToolFrame):
         self.folder_var = tk.StringVar(value=st.get("folder") or saved.get("folder") or "")
         ttk.Entry(self, textvariable=self.folder_var).grid(
             row=3, column=0, columnspan=2, sticky="ew", pady=(2, 8))
-        ttk.Button(self, text=self.tr("browse"), command=self._pick_folder).grid(
+        add_tip(ttk.Button(self, text=self.tr("browse"), command=self._pick_folder),
+                self.tr("tip_browse")).grid(
             row=3, column=2, sticky="ew", padx=(8, 0), pady=(2, 8))
 
         # shapefile არჩევა
@@ -165,7 +189,9 @@ class ShpCoordsTool(ToolFrame):
                                       state="readonly")
         self.shp_combo.grid(row=5, column=0, columnspan=2, sticky="ew", pady=(2, 8))
         self.shp_combo.bind("<<ComboboxSelected>>", lambda e: self._on_shp_selected())
-        ttk.Button(self, text=self.tr("rescan"), command=self._scan).grid(
+        add_tip(self.shp_combo, self.tr("tip_shp"))
+        add_tip(ttk.Button(self, text=self.tr("rescan"), command=self._scan),
+                self.tr("tip_rescan")).grid(
             row=5, column=2, sticky="ew", padx=(8, 0), pady=(2, 8))
 
         # UTM ზონა
@@ -197,28 +223,31 @@ class ShpCoordsTool(ToolFrame):
         self.tmpl_combo = ttk.Combobox(trow, textvariable=self.tmpl_var, width=48)
         self.tmpl_combo.pack(side="left", fill="x", expand=True, padx=(6, 6))
         self._refresh_templates()
-        ttk.Button(trow, text=self.tr("tmpl_add"), command=self._add_template).pack(side="left")
-        ttk.Button(trow, text=self.tr("tmpl_del"), command=self._delete_template).pack(
-            side="left", padx=(4, 0))
+        add_tip(ttk.Button(trow, text=self.tr("tmpl_add"), command=self._add_template),
+                self.tr("tip_tmpl_add")).pack(side="left")
+        add_tip(ttk.Button(trow, text=self.tr("tmpl_del"), command=self._delete_template),
+                self.tr("tip_tmpl_del")).pack(side="left", padx=(4, 0))
 
         # გადაკვეთის კუთხე
         arow = ttk.Frame(self)
         arow.grid(row=9, column=0, columnspan=3, sticky="w", pady=(0, 10))
         self.angle_var = tk.BooleanVar(value=st.get("angle", False))
-        ttk.Checkbutton(arow, text=self.tr("angle"), variable=self.angle_var).pack(side="left")
+        add_tip(ttk.Checkbutton(arow, text=self.tr("angle"), variable=self.angle_var),
+                self.tr("tip_angle")).pack(side="left")
         ttk.Label(arow, text=self.tr("angle_all")).pack(side="left", padx=(14, 4))
         self.angle_all_var = tk.StringVar(value=st.get("angle_all", ""))
         ttk.Entry(arow, textvariable=self.angle_all_var, width=8).pack(side="left")
 
         actions = ttk.Frame(self)
         actions.grid(row=10, column=0, columnspan=3, sticky="w")
-        ttk.Button(actions, text=self.tr("export"), command=self._export).pack(side="left")
-        ttk.Button(actions, text=self.tr("preview"), command=self._preview).pack(
-            side="left", padx=(12, 0))
-        ttk.Button(actions, text=self.tr("batch"), command=self._batch).pack(
-            side="left", padx=(4, 0))
-        ttk.Button(actions, text=self.tr("apply_deg"), command=self._apply_degree).pack(
-            side="left", padx=(12, 0))
+        add_tip(ttk.Button(actions, text=self.tr("export"), command=self._export),
+                self.tr("tip_export")).pack(side="left")
+        add_tip(ttk.Button(actions, text=self.tr("preview"), command=self._preview),
+                self.tr("tip_preview")).pack(side="left", padx=(12, 0))
+        add_tip(ttk.Button(actions, text=self.tr("batch"), command=self._batch),
+                self.tr("tip_batch")).pack(side="left", padx=(4, 0))
+        add_tip(ttk.Button(actions, text=self.tr("apply_deg"), command=self._apply_degree),
+                self.tr("tip_apply_deg")).pack(side="left", padx=(12, 0))
 
         # წინასწარი ცხრილი — ექსპორტამდე კოორდინატების გადასამოწმებლად
         prev = ttk.Frame(self)

@@ -64,6 +64,16 @@ TR = {
     "tc_copy":      {"en": "Copy",                 "ka": "კოპირება"},
     "tc_remember":  {"en": "💾 Remember folder",   "ka": "💾 საქაღალდის დამახსოვრება"},
     "tc_remember_all": {"en": "for all tools",     "ka": "ყველა ხელსაწყოსთვის"},
+    "tc_tip_source":{"en": "Folder that holds the template shapefiles.",
+                     "ka": "საქაღალდე, სადაც შაბლონი shapefile-ებია."},
+    "tc_tip_dest":  {"en": "Where to copy the template to.",
+                     "ka": "სად დაკოპირდეს შაბლონი."},
+    "tc_tip_copy":  {"en": "Copy the template with all sidecar files (auto-numbered).",
+                     "ka": "შაბლონის კოპირება ყველა თანმხლები ფაილით (ავტო-ნუმერაციით)."},
+    "tc_tip_remember": {"en": "Remember the target folder for next time.",
+                        "ka": "სამიზნე საქაღალდის დამახსოვრება მომავლისთვის."},
+    "tc_tip_remember_all": {"en": "Use one saved folder for every copy tool.",
+                            "ka": "ერთი შენახული საქაღალდე ყველა კოპირ-ხელსაწყოსთვის."},
     "tc_saved":     {"en": "Folder saved — it will be remembered next time.",
                      "ka": "საქაღალდე შენახულია — მომდევნო გაშვებაზეც დაიმახსოვრდება."},
     "browse":       {"en": "Browse…",              "ka": "დათვალიერება…"},
@@ -114,6 +124,7 @@ THEMES = {
 # გამოიყენონ (gis_box __main__-ის ხელახლა იმპორტის გარეშე).
 from tools.base import ToolFrame
 from tools.i18n import translate
+from tools.tooltip import add_tip
 
 
 # ---- ინსტრუმენტი: შაბლონის კოპირება (პარამეტრიზებული) ---------------------
@@ -148,7 +159,8 @@ class TemplateCopier(ToolFrame):
         self.src_var = tk.StringVar(value=self.app.source_dir)
         ttk.Entry(self, textvariable=self.src_var, width=52).grid(
             row=3, column=0, columnspan=2, sticky="ew", pady=(2, 10))
-        ttk.Button(self, text=self.t("browse"), command=self.pick_source).grid(
+        add_tip(ttk.Button(self, text=self.t("browse"), command=self.pick_source),
+                self.t("tc_tip_source")).grid(
             row=3, column=2, sticky="ew", padx=(8, 0), pady=(2, 10))
 
         # ზონები / შაბლონი
@@ -168,7 +180,8 @@ class TemplateCopier(ToolFrame):
         self.dest_var = tk.StringVar(value=dest_initial)
         ttk.Entry(self, textvariable=self.dest_var, width=52).grid(
             row=6, column=0, columnspan=2, sticky="ew", pady=(2, 0))
-        ttk.Button(self, text=self.t("browse"), command=self.pick_dest).grid(
+        add_tip(ttk.Button(self, text=self.t("browse"), command=self.pick_dest),
+                self.t("tc_tip_dest")).grid(
             row=6, column=2, sticky="ew", padx=(8, 0), pady=(2, 0))
 
         ttk.Label(self, text=self.t("tc_hint"), foreground=pal["muted"],
@@ -178,12 +191,14 @@ class TemplateCopier(ToolFrame):
         # მოქმედებები: კოპირება + საქაღალდის დამახსოვრება (+ „ყველასთვის“)
         actions = ttk.Frame(self)
         actions.grid(row=8, column=0, columnspan=3, sticky="ew")
-        ttk.Button(actions, text=self.t("tc_copy"), command=self.do_copy).pack(side="left")
-        ttk.Button(actions, text=self.t("tc_remember"), command=self._remember).pack(
-            side="left", padx=(12, 4))
+        add_tip(ttk.Button(actions, text=self.t("tc_copy"), command=self.do_copy),
+                self.t("tc_tip_copy")).pack(side="left")
+        add_tip(ttk.Button(actions, text=self.t("tc_remember"), command=self._remember),
+                self.t("tc_tip_remember")).pack(side="left", padx=(12, 4))
         self.remember_all_var = tk.BooleanVar(value=False)
-        ttk.Checkbutton(actions, text=self.t("tc_remember_all"),
-                        variable=self.remember_all_var).pack(side="left")
+        add_tip(ttk.Checkbutton(actions, text=self.t("tc_remember_all"),
+                                variable=self.remember_all_var),
+                self.t("tc_tip_remember_all")).pack(side="left")
 
         self.columnconfigure(0, weight=1)
 

@@ -22,6 +22,7 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox, scrolledtext
 
 from tools.base import ToolFrame
+from tools.tooltip import add_tip
 # სუფთა ლოგიკა ცალკე მოდულში (ტესტირებადი, tkinter-ის გარეშე)
 from tools.translit import GEO2LAT, GEO_RANGE, transliterate, _sibling, feature_count
 
@@ -92,6 +93,20 @@ RTR = {
                     "ka": "? {name} — ვერ წავიკითხე"},
     "chk_sum":   {"en": "— Checked {t}: {d} with data, {e} empty, {u} unreadable —",
                   "ka": "— შემოწმდა {t}: {d} მასალით, {e} ცარიელი, {u} წაუკითხავი —"},
+
+    # tooltip-ები
+    "tip_browse": {"en": "Pick the folder with the files to rename.",
+                   "ka": "აირჩიე საქაღალდე გადასარქმევი ფაილებით."},
+    "tip_recursive": {"en": "Also process files in subfolders.",
+                      "ka": "ქვესაქაღალდეების ფაილებიც დამუშავდეს."},
+    "tip_preview": {"en": "Show old → new names before renaming.",
+                    "ka": "აჩვენე ძველი → ახალი სახელები გადარქმევამდე."},
+    "tip_rename": {"en": "Rename now (with confirmation). Undo available.",
+                   "ka": "გადაარქვი ახლა (დადასტურებით). დაბრუნება შესაძლებელია."},
+    "tip_undo":  {"en": "Revert the last rename batch.",
+                  "ka": "ბოლო გადარქმევის დაბრუნება."},
+    "tip_check": {"en": "Log which .shp have data and which are empty.",
+                  "ka": "ლოგში — რომელ .shp-ში დევს მასალა და რომელი ცარიელია."},
 }
 
 
@@ -121,26 +136,30 @@ class RenameTransliterateTool(ToolFrame):
         self.folder_var = tk.StringVar(value=st.get("folder") or saved.get("folder") or "")
         ttk.Entry(row, textvariable=self.folder_var).pack(
             side="left", fill="x", expand=True, padx=(6, 6))
-        ttk.Button(row, text=self.tr("browse"), command=self._pick).pack(side="left")
+        add_tip(ttk.Button(row, text=self.tr("browse"), command=self._pick),
+                self.tr("tip_browse")).pack(side="left")
 
         opt = ttk.Frame(self)
         opt.pack(fill="x", pady=(8, 8))
         self.recursive_var = tk.BooleanVar(value=st.get("recursive", False))
-        ttk.Checkbutton(opt, text=self.tr("recursive"),
-                        variable=self.recursive_var).pack(side="left")
-        ttk.Button(opt, text=self.tr("preview"), command=self._preview).pack(
-            side="left", padx=(16, 4))
-        ttk.Button(opt, text=self.tr("rename"), command=self._rename).pack(side="left")
-        ttk.Button(opt, text=self.tr("undo"), command=self._undo_rename).pack(
-            side="left", padx=(4, 0))
+        add_tip(ttk.Checkbutton(opt, text=self.tr("recursive"),
+                                variable=self.recursive_var),
+                self.tr("tip_recursive")).pack(side="left")
+        add_tip(ttk.Button(opt, text=self.tr("preview"), command=self._preview),
+                self.tr("tip_preview")).pack(side="left", padx=(16, 4))
+        add_tip(ttk.Button(opt, text=self.tr("rename"), command=self._rename),
+                self.tr("tip_rename")).pack(side="left")
+        add_tip(ttk.Button(opt, text=self.tr("undo"), command=self._undo_rename),
+                self.tr("tip_undo")).pack(side="left", padx=(4, 0))
 
         # --- ცალკე მდგომი ფუნქცია: მასალის (ცარიელობის) შემოწმება ---
         ttk.Separator(self, orient="horizontal").pack(fill="x", pady=(4, 6))
         chk = ttk.Frame(self)
         chk.pack(fill="x")
         self.check_var = tk.BooleanVar(value=False)
-        ttk.Checkbutton(chk, text=self.tr("check"), variable=self.check_var,
-                        command=self._check_empty).pack(side="left")
+        add_tip(ttk.Checkbutton(chk, text=self.tr("check"), variable=self.check_var,
+                                command=self._check_empty),
+                self.tr("tip_check")).pack(side="left")
         ttk.Label(self, text=self.tr("check_hint"), foreground=pal["muted"],
                   wraplength=620, justify="left").pack(anchor="w", pady=(0, 8))
 

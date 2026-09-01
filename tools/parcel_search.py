@@ -21,6 +21,7 @@ import pandas as pd
 import pyogrio
 
 from tools.base import ToolFrame
+from tools.tooltip import add_tip
 
 
 # ---------------------------------------------------------------------------
@@ -124,6 +125,29 @@ PTR = {
     "done_status":   {"en": "Done — found {f}, not found {nf}.",
                       "ka": "დასრულდა — ნაპოვნი {f}, ვერ ნაპოვნი {nf}."},
     "nf_saved":      {"en": "Not-found codes saved: {p}", "ka": "ვერ ნაპოვნი კოდები შენახულია: {p}"},
+
+    # tooltip-ები
+    "tip_browse_gdb": {"en": "Pick a .gdb File Geodatabase.", "ka": "აირჩიე .gdb ბაზა."},
+    "tip_read_layers": {"en": "Read the list of layers from the database.",
+                        "ka": "ბაზიდან შრეების სიის წაკითხვა."},
+    "tip_db_remove": {"en": "Remove this database from the dropdown list.",
+                      "ka": "ამ ბაზის ამოღება ჩამოსაშლელი სიიდან."},
+    "tip_layer":     {"en": "Layer to search in.", "ka": "შრე, სადაც ვეძებთ."},
+    "tip_field":     {"en": "Field that holds the cadastral code.",
+                      "ka": "ველი, სადაც საკადასტრო კოდია."},
+    "tip_remember":  {"en": "Remember the database, layer and field for next time.",
+                      "ka": "ბაზის, შრისა და ველის დამახსოვრება მომავლისთვის."},
+    "tip_load":      {"en": "Load codes from a CSV / Excel file.",
+                     "ka": "კოდების ატვირთვა CSV / Excel-იდან."},
+    "tip_shp":       {"en": "Create a Shapefile of the results.",
+                     "ka": "შედეგების Shapefile-ის შექმნა."},
+    "tip_gpkg":      {"en": "Create a GeoPackage of the results.",
+                     "ka": "შედეგების GeoPackage-ის შექმნა."},
+    "tip_search":    {"en": "Search the codes and create the output files.",
+                     "ka": "კოდების ძებნა და შედეგის ფაილების შექმნა."},
+    "tip_cancel":    {"en": "Stop the running search.", "ka": "მიმდინარე ძებნის შეჩერება."},
+    "tip_save_nf":   {"en": "Save the not-found codes to a text file.",
+                     "ka": "ვერ ნაპოვნი კოდების შენახვა ტექსტურ ფაილში."},
 }
 
 
@@ -206,9 +230,12 @@ class ParcelSearchTool(ToolFrame):
                                       values=self._databases, width=68)
         self.gdb_combo.grid(row=0, column=1, sticky="we", padx=6)
         self.gdb_combo.bind("<<ComboboxSelected>>", lambda e: self._on_db_selected())
-        ttk.Button(db, text="...", width=3, command=self._browse_gdb).grid(row=0, column=2, padx=4)
-        ttk.Button(db, text=tr("btn_read_layers"), command=self._load_layers).grid(row=0, column=3, padx=6)
-        ttk.Button(db, text=tr("btn_db_remove"), command=self._remove_db).grid(row=0, column=4, padx=(0, 6))
+        add_tip(ttk.Button(db, text="...", width=3, command=self._browse_gdb),
+                tr("tip_browse_gdb")).grid(row=0, column=2, padx=4)
+        add_tip(ttk.Button(db, text=tr("btn_read_layers"), command=self._load_layers),
+                tr("tip_read_layers")).grid(row=0, column=3, padx=6)
+        add_tip(ttk.Button(db, text=tr("btn_db_remove"), command=self._remove_db),
+                tr("tip_db_remove")).grid(row=0, column=4, padx=(0, 6))
 
         ttk.Label(db, text=tr("lbl_layer")).grid(row=1, column=0, sticky="w", padx=6, pady=3)
         self.layer_var = tk.StringVar(value=initial("layer", DEFAULT_LAYER))
@@ -216,16 +243,18 @@ class ParcelSearchTool(ToolFrame):
                                         values=[self.layer_var.get()], state="readonly", width=30)
         self.layer_combo.grid(row=1, column=1, sticky="w", padx=6)
         self.layer_combo.bind("<<ComboboxSelected>>", lambda e: self._load_fields())
+        add_tip(self.layer_combo, tr("tip_layer"))
 
         ttk.Label(db, text=tr("lbl_field")).grid(row=1, column=2, sticky="e", padx=6)
         self.field_var = tk.StringVar(value=initial("field", DEFAULT_FIELD))
         self.field_combo = ttk.Combobox(db, textvariable=self.field_var,
                                         values=[self.field_var.get()], state="readonly", width=22)
         self.field_combo.grid(row=1, column=3, sticky="w", padx=6)
+        add_tip(self.field_combo, tr("tip_field"))
 
         # --- დამახსოვრება (მუდმივი კონფიგი) ---
-        ttk.Button(db, text=tr("btn_remember"), command=self._remember).grid(
-            row=2, column=1, sticky="w", padx=6, pady=(2, 4))
+        add_tip(ttk.Button(db, text=tr("btn_remember"), command=self._remember),
+                tr("tip_remember")).grid(row=2, column=1, sticky="w", padx=6, pady=(2, 4))
         ttk.Label(db, text=tr("cfg_hint"), foreground=self.app.palette["muted"],
                   wraplength=560, justify="left").grid(
             row=3, column=0, columnspan=4, sticky="w", padx=6, pady=(0, 4))
@@ -239,7 +268,8 @@ class ParcelSearchTool(ToolFrame):
         bar = ttk.Frame(inp)
         bar.pack(fill="x", padx=6, pady=4)
         ttk.Label(bar, text=tr("lbl_enter")).pack(side="left")
-        ttk.Button(bar, text=tr("btn_load"), command=self._load_file).pack(side="right")
+        add_tip(ttk.Button(bar, text=tr("btn_load"), command=self._load_file),
+                tr("tip_load")).pack(side="right")
         ttk.Button(bar, text=tr("btn_clear"), command=lambda: self.codes_text.delete("1.0", "end")).pack(side="right", padx=4)
 
         self.codes_text = scrolledtext.ScrolledText(inp, height=8, font=("Consolas", 10))
@@ -260,8 +290,10 @@ class ParcelSearchTool(ToolFrame):
         ttk.Label(fmt_row, text=tr("out_create")).pack(side="left")
         self.shp_var = tk.BooleanVar(value=st.get("shp", True))
         self.gpkg_var = tk.BooleanVar(value=st.get("gpkg", True))
-        ttk.Checkbutton(fmt_row, text=tr("chk_shp"), variable=self.shp_var).pack(side="left", padx=(8, 4))
-        ttk.Checkbutton(fmt_row, text=tr("chk_gpkg"), variable=self.gpkg_var).pack(side="left")
+        add_tip(ttk.Checkbutton(fmt_row, text=tr("chk_shp"), variable=self.shp_var),
+                tr("tip_shp")).pack(side="left", padx=(8, 4))
+        add_tip(ttk.Checkbutton(fmt_row, text=tr("chk_gpkg"), variable=self.gpkg_var),
+                tr("tip_gpkg")).pack(side="left")
         out.columnconfigure(0, weight=1)
 
         # --- ღილაკი + გაუქმება + პროგრესი ---
@@ -269,9 +301,11 @@ class ParcelSearchTool(ToolFrame):
         btn_row.pack(fill="x", padx=8, pady=6)
         self.search_btn = ttk.Button(btn_row, text=tr("btn_search"), command=self._start_search)
         self.search_btn.pack(side="left", fill="x", expand=True)
+        add_tip(self.search_btn, tr("tip_search"))
         self.cancel_btn = ttk.Button(btn_row, text=tr("btn_cancel"),
                                      command=self._cancel_search, state="disabled")
         self.cancel_btn.pack(side="left", padx=(6, 0))
+        add_tip(self.cancel_btn, tr("tip_cancel"))
         self.progress = ttk.Progressbar(self, mode="determinate")
         self.progress.pack(fill="x", padx=8)
 
@@ -280,7 +314,8 @@ class ParcelSearchTool(ToolFrame):
         res.pack(fill="both", expand=True, **pad)
         self.log_text = scrolledtext.ScrolledText(res, height=10, font=("Consolas", 10), state="disabled")
         self.log_text.pack(fill="both", expand=True, padx=6, pady=4)
-        ttk.Button(res, text=tr("btn_save_nf"), command=self._save_not_found).pack(side="right", padx=6, pady=4)
+        add_tip(ttk.Button(res, text=tr("btn_save_nf"), command=self._save_not_found),
+                tr("tip_save_nf")).pack(side="right", padx=6, pady=4)
 
         self.status = tk.StringVar(value=tr("ready"))
         ttk.Label(self, textvariable=self.status, relief="sunken", anchor="w").pack(fill="x", side="bottom")

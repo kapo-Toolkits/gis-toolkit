@@ -11,7 +11,9 @@ PostgreSQL/PostGIS ბაზა. კავშირის პარამეტ�
 """
 
 import os
+import sys
 import queue
+import subprocess
 import threading
 
 import tkinter as tk
@@ -21,6 +23,37 @@ from tools.base import ToolFrame
 from tools import gdb2postgis_core as core
 from tools.gdb2postgis_state import SyncState
 from tools.gdb2postgis_audit import AuditStore
+
+_APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+TASK_NAME = "GIS_BOX_gdb2postgis"     # Windows Task Scheduler-ის დავალების სახელი
+
+
+def _no_window():
+    return getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
+
+
+def _task_command():
+    """ბრძანება, რომელსაც Task Scheduler გაუშვებს — headless GDB → PostGIS."""
+    exe = sys.executable
+    if getattr(sys, "frozen", False):                 # PyInstaller-ის .exe
+        return f'"{exe}" --gdb2pg-run'
+    pyw = os.path.join(os.path.dirname(exe), "pythonw.exe")   # კონსოლის გარეშე
+    runner = pyw if os.path.exists(pyw) else exe
+    return f'"{runner}" "{os.path.join(_APP_DIR, "gis_box.py")}" --gdb2pg-run'
+
+
+def register_task(schedule_kind, every):
+    """schtasks-ით ფონური დავალების რეგისტრაცია (Windows). (ok, message)."""
+    r = subprocess.run(
+        ["schtasks", "/Create", "/TN", TASK_NAME, "/TR", _task_command(),
+         "/SC", schedule_kind, "/MO", str(every), "/F"],
+        capture_output=True, text=True, creationflags=_no_window())
+    return r.returncode == 0, (r.stderr or r.stdout).strip()
+
+
+def unregister_task():
+    subprocess.run(["schtasks", "/Delete", "/TN", TASK_NAME, "/F"],
+                   capture_output=True, text=True, creationflags=_no_window())
 
 
 CATALOG = {
@@ -88,6 +121,19 @@ CATALOG = {
     "sched_hint":{"en": "Uses the current source, selected layers and settings above.",
                   "ka": "იყენებს მიმდინარე წყაროს, მონიშნულ შრეებსა და ზემოთ პარამეტრებს."},
     "sched_fire":{"en": "— Scheduled run —", "ka": "— განრიგით გაშვება —"},
+    "bg_enable": {"en": "Even when GIS_BOX is closed (Windows Task Scheduler)",
+                  "ka": "GIS_BOX-ის დახურვის შემდეგაც (Windows Task Scheduler)"},
+    "bg_registered": {"en": "Background task registered (runs even when closed).",
+                      "ka": "ფონური დავალება რეგისტრირდა (მუშაობს დახურვის შემდეგაც)."},
+    "bg_removed": {"en": "Background task removed.", "ka": "ფონური დავალება წაიშალა."},
+    "bg_win_only": {"en": "Background scheduling is Windows-only.",
+                    "ka": "ფონური განრიგი მხოლოდ Windows-ზეა."},
+    "bg_fail":   {"en": "Could not register the background task (admin rights may be needed):",
+                  "ka": "ფონური დავალება ვერ დარეგისტრირდა (შესაძლოა ადმინ. უფლებები სჭირდება):"},
+    "bg_no_pw":  {"en": "Tip: tick “remember password” (or set PGPASSWORD), otherwise "
+                        "background runs cannot authenticate.",
+                  "ka": "რჩევა: მონიშნე „პაროლის დამახსოვრება“ (ან დააყენე PGPASSWORD), "
+                        "თორემ ფონური გაშვება ვერ დაამოწმებს."},
     "import":   {"en": "▶ Import", "ka": "▶ იმპორტი"},
     "history":  {"en": "🕘 History…", "ka": "🕘 ისტორია…"},
     "hist_title": {"en": "GDB → PostGIS — history", "ka": "GDB → PostGIS — ისტორია"},
@@ -298,11 +344,18 @@ class Gdb2PostgisTool(ToolFrame):
         self._set_unit(cfg("sched_unit", "minutes"))
         ttk.Button(sched, text=self.tr("sched_apply"), command=self._apply_schedule).grid(
             row=0, column=3, sticky="w", padx=4)
+        # ფონური გაშვება — GIS_BOX-ის დახურვის შემდეგაც (Windows Task Scheduler)
+        self.bg_var = tk.BooleanVar(value=cfg("sched_bg", False))
+        self.bg_cb = ttk.Checkbutton(sched, text=self.tr("bg_enable"),
+                                     variable=self.bg_var, command=self._apply_schedule)
+        self.bg_cb.grid(row=1, column=0, columnspan=4, sticky="w", padx=4, pady=(4, 0))
+        if sys.platform != "win32":
+            self.bg_cb.configure(state="disabled")
         self.next_run_var = tk.StringVar(value=self.tr("sched_off"))
         ttk.Label(sched, textvariable=self.next_run_var,
-                  font=("Segoe UI", 9, "bold")).grid(row=1, column=0, columnspan=4, sticky="w", padx=4, pady=(4, 0))
+                  font=("Segoe UI", 9, "bold")).grid(row=2, column=0, columnspan=4, sticky="w", padx=4, pady=(4, 0))
         ttk.Label(sched, text=self.tr("sched_hint"), foreground=pal["muted"],
-                  wraplength=660, justify="left").grid(row=2, column=0, columnspan=4, sticky="w", padx=4)
+                  wraplength=660, justify="left").grid(row=3, column=0, columnspan=4, sticky="w", padx=4)
 
         # --- Actions ---
         act = ttk.Frame(body)
@@ -465,14 +518,46 @@ class Gdb2PostgisTool(ToolFrame):
         unit = self._unit_map.get(self.unit_var.get(), "minutes")
         return n * {"minutes": 60_000, "hours": 3_600_000, "days": 86_400_000}[unit]
 
+    def _sc_mo(self):
+        """schtasks-ის /SC და /MO — ინტერვალის ერთეულიდან."""
+        unit = self._unit_map.get(self.unit_var.get(), "minutes")
+        try:
+            n = max(1, int(self.every_var.get()))
+        except ValueError:
+            n = 1
+        return {"minutes": "MINUTE", "hours": "HOURLY", "days": "DAILY"}[unit], n
+
     def _apply_schedule(self):
+        # in-app ტაიმერის გაუქმება (ხელახლა დაისმება საჭიროებისამებრ)
         if self._sched_after_id is not None:
             self.after_cancel(self._sched_after_id)
             self._sched_after_id = None
-        if not self.sched_var.get():
+
+        want_bg = self.bg_var.get() and sys.platform == "win32"
+
+        if not self.sched_var.get():           # განრიგი გამორთულია — ყველაფრის მოხსნა
+            if sys.platform == "win32":
+                unregister_task()
             self.next_run_var.set(self.tr("sched_off"))
             return
-        self._schedule_next(self._interval_ms())
+
+        if want_bg:                            # ფონური — Windows Task Scheduler
+            self._persist()                    # task შენახულ კონფიგს კითხულობს
+            sc, mo = self._sc_mo()
+            ok, msg = register_task(sc, mo)
+            if not ok:
+                messagebox.showerror(self.tr("err"), f"{self.tr('bg_fail')}\n{msg}")
+                self.next_run_var.set(self.tr("sched_off"))
+                return
+            # პაროლის შეხსენება — უპაროლოდ ფონური გაშვება ვერ დაამოწმებს
+            if not (self.remember_pw.get() and self.pw_var.get()):
+                self.app.log("— " + self.tr("bg_no_pw"))
+            self.next_run_var.set(self.tr("bg_registered"))
+            self.app.log("— " + self.tr("bg_registered"))
+        else:                                  # in-app ტაიმერი (მხოლოდ ღია აპში)
+            if sys.platform == "win32":
+                unregister_task()
+            self._schedule_next(self._interval_ms())
 
     def _schedule_next(self, ms):
         from datetime import datetime, timedelta
@@ -502,7 +587,8 @@ class Gdb2PostgisTool(ToolFrame):
             incremental=self.incr_var.get(), key_field=self.key_var.get().strip(),
             track_field=self.track_var.get().strip(), detect_deletes=self.deletes_var.get())
 
-    def _remember(self):
+    def _persist(self):
+        """მიმდინარე პარამეტრების შენახვა tool_config-ში (git-ignored)."""
         data = {
             "ogr2ogr": self.ogr2ogr_var.get().strip(), "source_dir": self.dir_var.get().strip(),
             "host": self.host_var.get().strip(), "port": self.port_var.get().strip(),
@@ -514,6 +600,7 @@ class Gdb2PostgisTool(ToolFrame):
             "track_field": self.track_var.get().strip(), "detect_deletes": self.deletes_var.get(),
             "sched_on": self.sched_var.get(), "sched_every": self.every_var.get().strip(),
             "sched_unit": self._unit_map.get(self.unit_var.get(), "minutes"),
+            "sched_bg": self.bg_var.get(),
             # არჩეული ბაზა + მონიშნული შრეები — ავტომატიზაცია იმახსოვრებს რა-სად წავიდეს
             "source": self.source_var.get(), "layers": self._selected_layers(),
         }
@@ -523,6 +610,9 @@ class Gdb2PostgisTool(ToolFrame):
         # რომ ამავე სესიაში მიმდინარე არჩევანი შენარჩუნდეს frame-ის ხელახლა აწყობისას
         self._saved_source = data["source"]
         self._saved_layers = data["layers"]
+
+    def _remember(self):
+        self._persist()
         messagebox.showinfo("GIS_BOX", self.tr("saved"))
 
     # ---- import (thread) ----

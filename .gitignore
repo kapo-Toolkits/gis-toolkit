@@ -15,6 +15,9 @@ gdb2postgis_sync_state.json
 # --- GDB → PostGIS აუდიტის ისტორია (ლოკალური SQLite) ---
 gdb2postgis_audit.db
 
+# --- GDB → PostGIS ფონური (headless) გაშვების ლოგი ---
+gdb2postgis_run.log
+
 # --- ArcGIS მეტამონაცემები: შეიცავს ლოკალურ გზას/username-ს ---
 *.shp.xml
 

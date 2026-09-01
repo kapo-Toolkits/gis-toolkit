@@ -701,5 +701,10 @@ def _enable_dpi_awareness():
 
 
 if __name__ == "__main__":
+    # ფონური (headless) გაშვება — GDB → PostGIS განრიგისთვის (Task Scheduler),
+    # GUI-ს გარეშე; GIS_BOX-ის დახურვის შემდეგაც მუშაობს.
+    if "--gdb2pg-run" in sys.argv:
+        from tools.gdb2postgis_cli import run_headless
+        sys.exit(run_headless())
     _enable_dpi_awareness()
     GisBoxApp().mainloop()

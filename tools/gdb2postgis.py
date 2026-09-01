@@ -19,6 +19,7 @@ from tkinter import ttk, filedialog, messagebox
 
 from tools.base import ToolFrame
 from tools import gdb2postgis_core as core
+from tools.gdb2postgis_state import SyncState
 
 
 CATALOG = {
@@ -58,6 +59,21 @@ CATALOG = {
     "promote":  {"en": "Promote to multi", "ka": "Promote to multi"},
     "gist":     {"en": "Spatial index (GiST)", "ka": "სივრცული ინდექსი (GiST)"},
     "copy":     {"en": "Fast COPY", "ka": "სწრაფი COPY"},
+    "incr_group": {"en": "Incremental sync", "ka": "ინკრემენტული სინქრონი"},
+    "incr_enable": {"en": "Incremental (only changed rows)",
+                    "ka": "ინკრემენტული (მხოლოდ ცვლილებები)"},
+    "key_field": {"en": "Key field", "ka": "key ველი"},
+    "track_field": {"en": "Change field", "ka": "ცვლილების ველი"},
+    "auto_fields": {"en": "Auto-detect fields", "ka": "ველების ავტო-აღმოჩენა"},
+    "detect_deletes": {"en": "Detect deletes", "ka": "წაშლილების დეტექცია"},
+    "incr_hint": {"en": "First run per layer = full load + watermark; then only rows "
+                        "where change > watermark (upsert by key). Empty = auto.",
+                  "ka": "თითო შრის პირველი გაშვება = სრული load + watermark; მერე მხოლოდ "
+                        "ცვლილება > watermark (upsert key-ით). ცარიელი = ავტო."},
+    "auto_need_one": {"en": "Select exactly one layer to auto-detect fields.",
+                      "ka": "ავტო-აღმოჩენისთვის მონიშნე ზუსტად ერთი შრე."},
+    "auto_done": {"en": "Detected — key: {k}, change: {t}",
+                  "ka": "აღმოჩენილია — key: {k}, ცვლილება: {t}"},
     "import":   {"en": "▶ Import", "ka": "▶ იმპორტი"},
     "cancel":   {"en": "✖ Cancel", "ka": "✖ გაუქმება"},
     "remember": {"en": "💾 Remember settings", "ka": "💾 პარამეტრების დამახსოვრება"},
@@ -181,21 +197,47 @@ class Gdb2PostgisTool(ToolFrame):
         ttk.Checkbutton(opts, text=self.tr("gist"), variable=self.gist_var).grid(row=2, column=2, sticky="w", padx=4)
         ttk.Checkbutton(opts, text=self.tr("copy"), variable=self.copy_var).grid(row=2, column=3, sticky="w", padx=4)
 
+        # --- Incremental sync ---
+        incr = ttk.LabelFrame(self, text=self.tr("incr_group"), padding=8)
+        incr.grid(row=9, column=0, columnspan=4, sticky="ew", pady=(0, 8))
+        self.incr_var = tk.BooleanVar(value=cfg("incremental", False))
+        ttk.Checkbutton(incr, text=self.tr("incr_enable"), variable=self.incr_var,
+                        command=self._toggle_incr).grid(row=0, column=0, columnspan=2, sticky="w", padx=4)
+        self.deletes_var = tk.BooleanVar(value=cfg("detect_deletes", False))
+        self.deletes_cb = ttk.Checkbutton(incr, text=self.tr("detect_deletes"),
+                                          variable=self.deletes_var)
+        self.deletes_cb.grid(row=0, column=2, columnspan=2, sticky="w", padx=4)
+        ttk.Label(incr, text=self.tr("key_field")).grid(row=1, column=0, sticky="w", padx=4, pady=(4, 0))
+        self.key_var = tk.StringVar(value=cfg("key_field", ""))
+        self.key_entry = ttk.Entry(incr, textvariable=self.key_var, width=18)
+        self.key_entry.grid(row=1, column=1, sticky="w", padx=4, pady=(4, 0))
+        ttk.Label(incr, text=self.tr("track_field")).grid(row=1, column=2, sticky="w", padx=4, pady=(4, 0))
+        self.track_var = tk.StringVar(value=cfg("track_field", ""))
+        self.track_entry = ttk.Entry(incr, textvariable=self.track_var, width=18)
+        self.track_entry.grid(row=1, column=3, sticky="w", padx=4, pady=(4, 0))
+        self.auto_btn = ttk.Button(incr, text=self.tr("auto_fields"), command=self._auto_fields)
+        self.auto_btn.grid(row=2, column=0, columnspan=2, sticky="w", padx=4, pady=(4, 0))
+        ttk.Label(incr, text=self.tr("incr_hint"), foreground=pal["muted"],
+                  wraplength=660, justify="left").grid(
+            row=3, column=0, columnspan=4, sticky="w", padx=4, pady=(4, 0))
+
         # --- Actions ---
         act = ttk.Frame(self)
-        act.grid(row=9, column=0, columnspan=4, sticky="ew")
+        act.grid(row=10, column=0, columnspan=4, sticky="ew")
         self.import_btn = ttk.Button(act, text=self.tr("import"), command=self._start_import)
         self.import_btn.pack(side="left")
         self.cancel_btn = ttk.Button(act, text=self.tr("cancel"), command=self._cancel, state="disabled")
         self.cancel_btn.pack(side="left", padx=(6, 0))
         ttk.Button(act, text=self.tr("remember"), command=self._remember).pack(side="left", padx=(12, 0))
         self.progress = ttk.Progressbar(self, mode="indeterminate")
-        self.progress.grid(row=10, column=0, columnspan=4, sticky="ew", pady=(8, 0))
+        self.progress.grid(row=11, column=0, columnspan=4, sticky="ew", pady=(8, 0))
 
         self.columnconfigure(1, weight=1)
         self.rowconfigure(6, weight=1)
 
+        self._sync = SyncState()          # ინკრემენტული watermark-ები (git-ignored)
         self._refresh_gdal()
+        self._toggle_incr()
         if self.dir_var.get():
             self._scan_sources()
         self.after(100, self._poll)
@@ -287,12 +329,39 @@ class Gdb2PostgisTool(ToolFrame):
         else:
             messagebox.showerror(self.tr("err"), f"{self.tr('conn_fail')}\n{msg}")
 
+    # ---- incremental ----
+    def _toggle_incr(self):
+        state = "normal" if self.incr_var.get() else "disabled"
+        for w in (self.key_entry, self.track_entry, self.auto_btn, self.deletes_cb):
+            w.configure(state=state)
+
+    def _auto_fields(self):
+        """არჩეული (ერთადერთი) შრის ველებიდან key/change ველების ავტო-შერჩევა."""
+        src = self._sources.get(self.source_var.get())
+        _, ogrinfo = self._tools()
+        layers = self._selected_layers()
+        if not (src and ogrinfo) or len(layers) != 1:
+            messagebox.showwarning("GIS_BOX", self.tr("auto_need_one"))
+            return
+        try:
+            names = [f.name for f in core.list_fields(ogrinfo, src, layers[0])]
+        except Exception as e:
+            messagebox.showerror(self.tr("err"), str(e))
+            return
+        key = core.auto_detect_key(names)
+        track = core.auto_detect_track(names)
+        self.key_var.set(key)
+        self.track_var.set(track)
+        self.app.log("— " + self.tr("auto_done", k=key or "?", t=track or "?"))
+
     # ---- options / persistence ----
     def _opts(self):
         return core.ImportOptions(
             mode=self.mode_var.get(), t_srs=self.tsrs_var.get().strip(),
             prefix=self.prefix_var.get().strip(), promote_to_multi=self.promote_var.get(),
-            spatial_index=self.gist_var.get(), use_copy=self.copy_var.get())
+            spatial_index=self.gist_var.get(), use_copy=self.copy_var.get(),
+            incremental=self.incr_var.get(), key_field=self.key_var.get().strip(),
+            track_field=self.track_var.get().strip(), detect_deletes=self.deletes_var.get())
 
     def _remember(self):
         data = {
@@ -302,6 +371,8 @@ class Gdb2PostgisTool(ToolFrame):
             "schema": self.schema_var.get().strip(), "mode": self.mode_var.get(),
             "t_srs": self.tsrs_var.get().strip(), "prefix": self.prefix_var.get().strip(),
             "promote": self.promote_var.get(), "gist": self.gist_var.get(), "copy": self.copy_var.get(),
+            "incremental": self.incr_var.get(), "key_field": self.key_var.get().strip(),
+            "track_field": self.track_var.get().strip(), "detect_deletes": self.deletes_var.get(),
         }
         if self.remember_pw.get():          # პაროლი მხოლოდ თოლიის მონიშვნისას
             data["password"] = self.pw_var.get()
@@ -341,7 +412,7 @@ class Gdb2PostgisTool(ToolFrame):
             try:
                 res = core.run_import(ogr2ogr, src, layers, pg, opt, log_cb,
                                       should_cancel=self._cancel_event.is_set,
-                                      ogrinfo_path=ogrinfo)
+                                      ogrinfo_path=ogrinfo, state=self._sync)
                 self.msg_queue.put(("done", res))
             except Exception as e:
                 self.msg_queue.put(("done", e))

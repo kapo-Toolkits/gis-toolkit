@@ -138,6 +138,9 @@ class Gdb2PostgisTool(ToolFrame):
         self.running = False
         self._cancel_event = threading.Event()
         self._sources = {}                 # basename -> full path
+        # დამახსოვრებული არჩევანი — ბაზა და მონიშნული შრეები (ავტომატიზაციისთვის)
+        self._saved_source = saved.get("source", "")
+        self._saved_layers = saved.get("layers", [])
 
         def cfg(key, default=""):
             return saved.get(key, default)
@@ -365,7 +368,9 @@ class Gdb2PostgisTool(ToolFrame):
         self._sources = {os.path.basename(s): s for s in srcs}
         self.source_combo["values"] = list(self._sources)
         if self._sources:
-            self.source_var.set(next(iter(self._sources)))
+            want = self._saved_source if self._saved_source in self._sources \
+                else next(iter(self._sources))
+            self.source_var.set(want)
             self._load_layers()
         else:
             self.source_var.set("")
@@ -388,6 +393,11 @@ class Gdb2PostgisTool(ToolFrame):
             label = li.name + (f"  ({li.geom_type})" if li.geom_type else "")
             self.layers_list.insert("end", label)
             self._layer_names.append(li.name)      # ნამდვილი სახელი (label-ის გარეშე)
+        # დამახსოვრებული შრეების ხელახლა მონიშვნა (მხოლოდ იმავე ბაზისთვის)
+        if self.source_var.get() == self._saved_source and self._saved_layers:
+            for i, name in enumerate(self._layer_names):
+                if name in self._saved_layers:
+                    self.layers_list.selection_set(i)
 
     def _selected_layers(self):
         return [self._layer_names[i] for i in self.layers_list.curselection()
@@ -504,10 +514,15 @@ class Gdb2PostgisTool(ToolFrame):
             "track_field": self.track_var.get().strip(), "detect_deletes": self.deletes_var.get(),
             "sched_on": self.sched_var.get(), "sched_every": self.every_var.get().strip(),
             "sched_unit": self._unit_map.get(self.unit_var.get(), "minutes"),
+            # არჩეული ბაზა + მონიშნული შრეები — ავტომატიზაცია იმახსოვრებს რა-სად წავიდეს
+            "source": self.source_var.get(), "layers": self._selected_layers(),
         }
         if self.remember_pw.get():          # პაროლი მხოლოდ თოლიის მონიშვნისას
             data["password"] = self.pw_var.get()
         self.app.set_tool_config(self.tid, data)
+        # რომ ამავე სესიაში მიმდინარე არჩევანი შენარჩუნდეს frame-ის ხელახლა აწყობისას
+        self._saved_source = data["source"]
+        self._saved_layers = data["layers"]
         messagebox.showinfo("GIS_BOX", self.tr("saved"))
 
     # ---- import (thread) ----

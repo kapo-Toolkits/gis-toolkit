@@ -13,10 +13,10 @@ The UI is **bilingual** — Georgian / English (top-bar switch).
 | ინსტრუმენტი | აღწერა |
 |---|---|
 | **შაბლონის კოპირება** / Template copy | კოპირებს შაბლონურ shapefile-ს ყველა თანმხლები ფაილით (`.shp/.shx/.dbf/.prj/…`), ზრდადი სუფიქსით. რამდენიმე ნაკრები (მდინარის ნაპირი, გაზსადენის გადაკვეთა, დაცვის ზონა, UTM ბადე) — ახლის დამატება ერთი ჩანაწერით. |
-| **ნაკვეთის ძებნა** / Parcel search | ეძებს საკადასტრო კოდებს File Geodatabase-ში და ქმნის Shapefile + GeoPackage; ვერ ნაპოვნ კოდებს ცალკე ინახავს. |
+| **ნაკვეთის ძებნა** / Parcel search | ეძებს საკადასტრო კოდებს File Geodatabase-ში და ქმნის Shapefile + GeoPackage; ვერ ნაპოვნ კოდებს ცალკე ინახავს. **რამდენიმე ბაზა** ჩამოსაშლელ სიაში; შრეები ავტომატურად იკითხება (CadData-ის რეგიონები ქართული სახელით — „R02 — ქვემო ქართლი“), შრე და კოდის ველი არჩევადია. |
 | **კოორდინატების ამომღები** / Coordinate extractor | რუკის სურათიდან/PDF-იდან ამოიღებს კოორდინატების ცხრილს (OCR) ან გეო-რეფერენსით ითვლის პოლიგონის წვეროებსა და ფართობს; Excel-ში გატანა და ფორმატირება. |
 | **სახელების გადარქმევა** / Rename → Latin | საქაღალდის ქართულ-სახელიან shapefile-ებს გადაარქმევს ლათინურად (სფეისი/სიმბოლო → `_`), წინასწარი სიით. ასევე ამოწმებს რომელ shapefile-ში დევს მასალა და რომელი ცარიელია. |
-| **Shp → კოორდინატები** / Shp → coordinates | წერტილოვანი shapefile-იდან კითხულობს X/Y-ს UTM ზონით (37/38, .prj-დან ან ხელით) და გააქვს დაფორმატებულ Excel-ში — ტექსტური ქუდი, `№/X/Y`, არჩევითი „გადაკვეთის კუთხე“ (°), center+borders. |
+| **Shp → კოორდინატები** / Shp → coordinates | წერტილოვანი shapefile-იდან კითხულობს X/Y-ს UTM ზონით (37/38, .prj-დან ან ხელით), წინასწარი ცხრილით; გააქვს დაფორმატებულ Excel-ში — ტექსტური ქუდი, `№/X/Y`, არჩევითი „გადაკვეთის კუთხე“ (°), center+borders. **Batch** — საქაღალდის ყველა წერტილოვანი shapefile ერთბაშად. |
 
 ---
 
@@ -82,6 +82,12 @@ The **Parcel search** tool needs the path to your File Geodatabase. This path is
 ალტერნატივა (არასავალდებულო): დააკოპირე `config.example.txt` → `config.txt` და ჩაწერე გზა.
 Alternative (optional): copy `config.example.txt` → `config.txt` and set your path.
 
+რამდენიმე ბაზა ერთბაშად — `config.txt`-ში: `GDBS=path1;path2;path3` (ან ხელსაწყოში
+თითო ბაზა დაამატე „💾 დამახსოვრებით“). ხელსაწყო ჩამოსაშლელ სიაში გადაგირთავს.
+
+Several databases at once — in `config.txt`: `GDBS=path1;path2;path3` (or add each one in the
+tool via “💾 Remember”). The tool switches between them via the dropdown.
+
 ---
 
 ## პროექტის სტრუქტურა / Project layout
@@ -91,21 +97,46 @@ GIS_BOX/
 ├─ gis_box.py                # მთავარი აპლიკაცია / main app (sidebar + lazy loading)
 ├─ tools/
 │  ├─ base.py                # ToolFrame ბაზისური კლასი
-│  ├─ parcel_search.py       # ნაკვეთის ძებნა
+│  ├─ parcel_search.py       # ნაკვეთის ძებნა (მრავალი ბაზა)
 │  ├─ rename_transliterate.py# სახელების გადარქმევა + მასალის შემოწმება
-│  ├─ shp_coords.py          # Shp → კოორდინატები (Excel)
+│  ├─ shp_coords.py          # Shp → კოორდინატები (Excel, batch)
 │  ├─ coord_tool.py          # კოორდინატების ამომღების wrapper
-│  └─ coordextract/          # OCR + გეო-რეფერენსის პაკეტი
+│  ├─ coordextract/          # OCR + გეო-რეფერენსის პაკეტი
+│  ├─ translit.py            # ქართული→ლათინური (სუფთა ლოგიკა)
+│  ├─ fields.py              # კოდის ველის ავტო-შერჩევა
+│  ├─ regions.py             # CadData რეგიონების სახელები
+│  └─ xlsx_format.py         # საერთო Excel-ფორმატირება
+├─ tests/                    # pytest — სუფთა ლოგიკის ტესტები
+├─ packaging/                # nfpm (.deb/.rpm) + .desktop
+├─ gis_box.spec              # PyInstaller — დამოუკიდებელი ბილდი
 ├─ shp/                      # შაბლონური shapefile-ები (ცარიელი / საჯარო UTM ბადე)
 ├─ config.example.txt        # კონფიგის ნიმუში (config.txt git-ignored)
 ├─ GIS_BOX.bat / .command / .desktop  # გამშვებები Windows / macOS / Linux
-└─ requirements.txt
+├─ requirements.txt          # ხელსაწყოების დამოკიდებულებები
+└─ requirements-dev.txt      # ტესტების/დეველოპმენტის დამოკიდებულებები
 ```
 
 ახალი ხელსაწყოს დასამატებლად: შექმენი `ToolFrame`-ის მემკვიდრე კლასი და დაარეგისტრირე
-`gis_box.py`-ის `_build_tool_specs()`-ში.
+`gis_box.py`-ის `_build_tool_specs()`-ში. სუფთა ლოგიკა (გამოთვლა/ფორმატირება) ცალკე
+მოდულში გაიტანე (`tools/`-ში), რომ GUI-ს გარეშე დატესტვადი იყოს.
 
 To add a new tool: subclass `ToolFrame` and register it in `_build_tool_specs()` in `gis_box.py`.
+Keep pure logic (computation/formatting) in a separate module so it is testable without the GUI.
+
+---
+
+## ტესტები / Tests
+
+სუფთა ლოგიკა (ტრანსლიტერაცია, ველის შერჩევა, რეგიონები, Excel-ფორმატირება) დაფარულია
+pytest-ით; CI ყოველ push/PR-ზე უშვებს მათ Python 3.11/3.12-ზე.
+
+Pure logic (transliteration, field selection, regions, Excel formatting) is covered by pytest;
+CI runs it on every push/PR (Python 3.11/3.12).
+
+```bash
+pip install -r requirements-dev.txt
+pytest
+```
 
 ---
 

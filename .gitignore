@@ -12,6 +12,9 @@ gis_box_settings.json
 # --- GDB → PostGIS ინკრემენტული სინქრონის watermark-ები (ლოკალური) ---
 gdb2postgis_sync_state.json
 
+# --- GDB → PostGIS აუდიტის ისტორია (ლოკალური SQLite) ---
+gdb2postgis_audit.db
+
 # --- ArcGIS მეტამონაცემები: შეიცავს ლოკალურ გზას/username-ს ---
 *.shp.xml
 

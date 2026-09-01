@@ -20,6 +20,7 @@ from tkinter import ttk, filedialog, messagebox
 from tools.base import ToolFrame
 from tools import gdb2postgis_core as core
 from tools.gdb2postgis_state import SyncState
+from tools.gdb2postgis_audit import AuditStore
 
 
 CATALOG = {
@@ -88,6 +89,27 @@ CATALOG = {
                   "ka": "იყენებს მიმდინარე წყაროს, მონიშნულ შრეებსა და ზემოთ პარამეტრებს."},
     "sched_fire":{"en": "— Scheduled run —", "ka": "— განრიგით გაშვება —"},
     "import":   {"en": "▶ Import", "ka": "▶ იმპორტი"},
+    "history":  {"en": "🕘 History…", "ka": "🕘 ისტორია…"},
+    "hist_title": {"en": "GDB → PostGIS — history", "ka": "GDB → PostGIS — ისტორია"},
+    "hist_date": {"en": "Date:", "ka": "თარიღი:"},
+    "hist_none": {"en": "No history yet.", "ka": "ისტორია ჯერ არ არის."},
+    "col_time":  {"en": "time", "ka": "დრო"},
+    "col_layer": {"en": "layer", "ka": "შრე"},
+    "col_mode":  {"en": "mode", "ka": "რეჟიმი"},
+    "col_aff":   {"en": "affected", "ka": "შეხებული"},
+    "col_del":   {"en": "deleted", "ka": "წაშლილი"},
+    "col_ok":    {"en": "ok", "ka": "ok"},
+    "col_table": {"en": "table", "ka": "ცხრილი"},
+    "hist_ids":  {"en": "Feature IDs (key → action):", "ka": "ობიექტების ID (key → მოქმედება):"},
+    "hist_del_feats": {"en": "Delete these features from target",
+                       "ka": "ამ ობიექტების წაშლა ბაზიდან"},
+    "hist_del_rec": {"en": "Delete this history record", "ka": "ამ ჩანაწერის წაშლა"},
+    "hist_pick_run": {"en": "Select a run first.", "ka": "ჯერ აირჩიე გაშვება."},
+    "hist_del_feats_q": {"en": "Delete {n} feature(s) from {t}? This changes the database.",
+                         "ka": "წავშალო {n} ობიექტი {t}-დან? ეს ცვლის ბაზას."},
+    "hist_deleted": {"en": "Deleted {n} feature(s).", "ka": "წაიშალა {n} ობიექტი."},
+    "hist_no_key": {"en": "This run has no key field / stored IDs — cannot delete features.",
+                    "ka": "ამ გაშვებას key ველი / შენახული ID არ აქვს — წაშლა ვერ ხერხდება."},
     "cancel":   {"en": "✖ Cancel", "ka": "✖ გაუქმება"},
     "remember": {"en": "💾 Remember settings", "ka": "💾 პარამეტრების დამახსოვრება"},
     "saved":    {"en": "Settings saved (password not stored unless ticked).",
@@ -266,6 +288,7 @@ class Gdb2PostgisTool(ToolFrame):
         self.cancel_btn = ttk.Button(act, text=self.tr("cancel"), command=self._cancel, state="disabled")
         self.cancel_btn.pack(side="left", padx=(6, 0))
         ttk.Button(act, text=self.tr("remember"), command=self._remember).pack(side="left", padx=(12, 0))
+        ttk.Button(act, text=self.tr("history"), command=self._open_history).pack(side="left", padx=(6, 0))
         self.progress = ttk.Progressbar(self, mode="indeterminate")
         self.progress.grid(row=12, column=0, columnspan=4, sticky="ew", pady=(8, 0))
 
@@ -273,6 +296,7 @@ class Gdb2PostgisTool(ToolFrame):
         self.rowconfigure(6, weight=1)
 
         self._sync = SyncState()          # ინკრემენტული watermark-ები (git-ignored)
+        self._audit = AuditStore()        # გაშვებების ისტორია (git-ignored SQLite)
         self._sched_after_id = None       # scheduler-ის after()-callback
         self._refresh_gdal()
         self._toggle_incr()
@@ -498,7 +522,8 @@ class Gdb2PostgisTool(ToolFrame):
             try:
                 res = core.run_import(ogr2ogr, src, layers, pg, opt, log_cb,
                                       should_cancel=self._cancel_event.is_set,
-                                      ogrinfo_path=ogrinfo, state=self._sync)
+                                      ogrinfo_path=ogrinfo, state=self._sync,
+                                      audit=self._audit, profile="")
                 self.msg_queue.put(("done", res))
             except Exception as e:
                 self.msg_queue.put(("done", e))
@@ -537,3 +562,109 @@ class Gdb2PostgisTool(ToolFrame):
         msg = self.tr("done", ok=payload.ok_count, fail=payload.fail_count)
         self.app.log("— " + msg)
         messagebox.showinfo("GIS_BOX", msg)
+
+    # ---- History (audit) ----
+    def _open_history(self):
+        dates = self._audit.dates()
+        win = tk.Toplevel(self)
+        win.title(self.tr("hist_title"))
+        win.geometry("780x580")
+        win.transient(self.winfo_toplevel())
+
+        top = ttk.Frame(win, padding=8)
+        top.pack(fill="x")
+        ttk.Label(top, text=self.tr("hist_date")).pack(side="left")
+        date_var = tk.StringVar()
+        date_cb = ttk.Combobox(top, textvariable=date_var, state="readonly",
+                               values=dates, width=16)
+        date_cb.pack(side="left", padx=6)
+        if not dates:
+            ttk.Label(win, text=self.tr("hist_none"), padding=12).pack(anchor="w")
+            return
+
+        run_cols = [("time", "col_time", 90), ("layer", "col_layer", 180),
+                    ("mode", "col_mode", 90), ("aff", "col_aff", 80),
+                    ("del", "col_del", 70), ("ok", "col_ok", 40),
+                    ("table", "col_table", 160)]
+        runs = ttk.Treeview(win, columns=[c[0] for c in run_cols],
+                            show="headings", height=9)
+        for cid, key, w in run_cols:
+            runs.heading(cid, text=self.tr(key))
+            runs.column(cid, width=w, anchor="w")
+        runs.pack(fill="both", expand=True, padx=8)
+
+        ttk.Label(win, text=self.tr("hist_ids")).pack(anchor="w", padx=8, pady=(6, 0))
+        ids_tree = ttk.Treeview(win, columns=("key", "action"), show="headings", height=8)
+        ids_tree.heading("key", text="key")
+        ids_tree.heading("action", text="action")
+        ids_tree.column("key", width=280)
+        ids_tree.column("action", width=100)
+        ids_tree.pack(fill="both", expand=True, padx=8)
+
+        run_map = {}
+
+        def load_runs():
+            runs.delete(*runs.get_children())
+            ids_tree.delete(*ids_tree.get_children())
+            run_map.clear()
+            for r in self._audit.runs_on(date_var.get()):
+                iid = runs.insert("", "end", values=(
+                    r["ts"][11:19], r["layer"], r["mode"], r["affected"], r["deleted"],
+                    "✓" if r["ok"] else "✗", r["target_table"]))
+                run_map[iid] = r
+
+        def load_ids(_evt=None):
+            ids_tree.delete(*ids_tree.get_children())
+            sel = runs.selection()
+            r = run_map.get(sel[0]) if sel else None
+            if not r:
+                return
+            for kv, act in self._audit.id_rows(r["id"]):
+                ids_tree.insert("", "end", values=(kv, act))
+
+        def selected_run():
+            sel = runs.selection()
+            return run_map.get(sel[0]) if sel else None
+
+        def del_feats():
+            r = selected_run()
+            if not r:
+                messagebox.showwarning("GIS_BOX", self.tr("hist_pick_run"))
+                return
+            ids = self._audit.ids(r["id"], "upsert")
+            key = r["key_field"]
+            if not (key and ids):
+                messagebox.showinfo("GIS_BOX", self.tr("hist_no_key"))
+                return
+            table = r["target_table"]
+            if not messagebox.askyesno("GIS_BOX",
+                                       self.tr("hist_del_feats_q", n=len(ids), t=table)):
+                return
+            _, ogrinfo = self._tools()
+            if not ogrinfo:
+                messagebox.showwarning("GIS_BOX", self.tr("warn_gdal"))
+                return
+            n, msg = core.delete_features(ogrinfo, self._pg(), r["schema"], table, key, ids)
+            if msg and n == 0:
+                messagebox.showerror(self.tr("err"), msg)
+            else:
+                messagebox.showinfo("GIS_BOX", self.tr("hist_deleted", n=n))
+                self.app.log("— " + self.tr("hist_deleted", n=n))
+
+        def del_rec():
+            r = selected_run()
+            if not r:
+                messagebox.showwarning("GIS_BOX", self.tr("hist_pick_run"))
+                return
+            self._audit.delete_run(r["id"])
+            load_runs()
+
+        btns = ttk.Frame(win, padding=8)
+        btns.pack(fill="x")
+        ttk.Button(btns, text=self.tr("hist_del_feats"), command=del_feats).pack(side="left")
+        ttk.Button(btns, text=self.tr("hist_del_rec"), command=del_rec).pack(side="left", padx=6)
+
+        date_cb.bind("<<ComboboxSelected>>", lambda e: load_runs())
+        runs.bind("<<TreeviewSelect>>", load_ids)
+        date_var.set(dates[0])
+        load_runs()

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """ტესტები — ნაკვეთის ძებნის run_search: პროგრესი და გაუქმება."""
 
-import tools.parcel_search as ps
+import tools.search_core as ps
 
 
 class _FakePyogrio:

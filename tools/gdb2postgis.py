@@ -20,6 +20,7 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
 from tools.base import ToolFrame
+from tools.tooltip import add_tip
 from tools import gdb2postgis_core as core
 from tools.gdb2postgis_state import SyncState
 from tools.gdb2postgis_audit import AuditStore
@@ -167,6 +168,56 @@ CATALOG = {
     "running":  {"en": "Importing…", "ka": "მიმდინარეობს იმპორტი…"},
     "done":     {"en": "Done — OK {ok}, failed {fail}.", "ka": "დასრულდა — OK {ok}, ჩავარდა {fail}."},
     "cancelled":{"en": "Cancelled.", "ka": "გაუქმდა."},
+
+    # --- tooltip-ები (hover-მინიშნებები) ---
+    "tip_browse_ogr": {"en": "Pick ogr2ogr.exe (from QGIS/OSGeo4W) if not auto-detected.",
+                       "ka": "მიუთითე ogr2ogr.exe (QGIS/OSGeo4W-დან), თუ ავტომატურად ვერ იპოვა."},
+    "tip_browse_dir": {"en": "Folder that contains your .gdb / .mdb.",
+                       "ka": "საქაღალდე, სადაც შენი .gdb / .mdb-ია."},
+    "tip_source": {"en": "Choose the Geodatabase to read layers from.",
+                   "ka": "აირჩიე Geodatabase, საიდანაც შრეები წაიკითხოს."},
+    "tip_layers": {"en": "Select layers to import (Ctrl/Shift for several).",
+                   "ka": "მონიშნე ასატანი შრეები (Ctrl/Shift — რამდენიმე)."},
+    "tip_test":   {"en": "Check the PostGIS connection before importing.",
+                   "ka": "იმპორტამდე შეამოწმე PostGIS-კავშირი."},
+    "tip_remember_pw": {"en": "Store the password locally — needed for background runs.",
+                        "ka": "პაროლი ლოკალურად შეინახე — ფონურ გაშვებას სჭირდება."},
+    "tip_mode":   {"en": "overwrite = recreate table (first load); append = add rows; "
+                         "update = update existing.",
+                   "ka": "overwrite = ცხრილს თავიდან ქმნის (პირველი load); append = რიგებს ამატებს; "
+                         "update = არსებულს ანახლებს."},
+    "tip_promote": {"en": "Convert Point/Line/Polygon to Multi* — avoids type-mix errors.",
+                    "ka": "Point/Line/Polygon → Multi* — თავიდან ირიდებს ტიპის-შერევის შეცდომას."},
+    "tip_gist":   {"en": "Create a spatial (GiST) index — faster queries.",
+                   "ka": "სივრცული (GiST) ინდექსი — სწრაფი მოთხოვნები."},
+    "tip_copy":   {"en": "Fast COPY load. Turn OFF to see the real error on failures.",
+                   "ka": "სწრაფი COPY. ჩავარდნისას გამორთე ნამდვილი შეცდომის სანახავად."},
+    "tip_incr":   {"en": "Sync only changed rows (upsert by key). Needs key + change field.",
+                   "ka": "მხოლოდ ცვლილებების სინქრონი (upsert key-ით). სჭირდება key + change ველი."},
+    "tip_auto":   {"en": "Auto-fill key & change fields from the selected layer.",
+                   "ka": "key და change ველების ავტო-შევსება არჩეული შრიდან."},
+    "tip_deletes":{"en": "Also remove target rows deleted in the source.",
+                   "ka": "წყაროში წაშლილ ობიექტებს სამიზნიდანაც აშორებს."},
+    "tip_key":    {"en": "Unique id, e.g. OBJECTID / GlobalID (empty = auto).",
+                   "ka": "უნიკალური id, მაგ. OBJECTID / GlobalID (ცარიელი = ავტო)."},
+    "tip_track":  {"en": "Change timestamp, e.g. last_edited_date (empty = auto).",
+                   "ka": "ცვლილების თარიღი, მაგ. last_edited_date (ცარიელი = ავტო)."},
+    "tip_sched":  {"en": "Run automatically at the interval (while GIS_BOX is open).",
+                   "ka": "ავტომატური გაშვება ინტერვალით (სანამ GIS_BOX ღიაა)."},
+    "tip_apply":  {"en": "Apply / update the schedule.",
+                   "ka": "განრიგის გამოყენება / განახლება."},
+    "tip_bg":     {"en": "Register a Windows task so it runs even when GIS_BOX is closed.",
+                   "ka": "Windows-დავალება — მუშაობს GIS_BOX-ის დახურვის შემდეგაც."},
+    "tip_import": {"en": "Import the selected layers now.",
+                   "ka": "მონიშნული შრეების იმპორტი ახლა."},
+    "tip_cancel": {"en": "Stop the current import (between layers).",
+                   "ka": "მიმდინარე იმპორტის შეჩერება (შრეებს შორის)."},
+    "tip_remember": {"en": "Save all settings, chosen source and selected layers.",
+                     "ka": "შეინახე ყველა პარამეტრი, არჩეული ბაზა და მონიშნული შრეები."},
+    "tip_history": {"en": "Browse past runs by date; drill into IDs; delete features/records.",
+                    "ka": "წარსული გაშვებები თარიღით; ID-ები; ობიექტების/ჩანაწერის წაშლა."},
+    "tip_sel_all": {"en": "Select all layers.", "ka": "ყველა შრის მონიშვნა."},
+    "tip_sel_none":{"en": "Clear layer selection.", "ka": "მონიშვნის გასუფთავება."},
 }
 
 
@@ -223,7 +274,8 @@ class Gdb2PostgisTool(ToolFrame):
         self.ogr2ogr_var = tk.StringVar(value=cfg("ogr2ogr"))
         ttk.Entry(body, textvariable=self.ogr2ogr_var).grid(
             row=2, column=1, columnspan=2, sticky="ew", padx=6)
-        ttk.Button(body, text=self.tr("browse"), command=self._pick_ogr).grid(row=2, column=3, sticky="ew")
+        add_tip(ttk.Button(body, text=self.tr("browse"), command=self._pick_ogr),
+                self.tr("tip_browse_ogr")).grid(row=2, column=3, sticky="ew")
         self.gdal_status = ttk.Label(body, text="", foreground=pal["muted"])
         self.gdal_status.grid(row=3, column=1, columnspan=3, sticky="w", pady=(0, 8))
 
@@ -231,7 +283,8 @@ class Gdb2PostgisTool(ToolFrame):
         ttk.Label(body, text=self.tr("source_dir")).grid(row=4, column=0, sticky="w")
         self.dir_var = tk.StringVar(value=cfg("source_dir"))
         ttk.Entry(body, textvariable=self.dir_var).grid(row=4, column=1, columnspan=2, sticky="ew", padx=6)
-        ttk.Button(body, text=self.tr("browse"), command=self._pick_dir).grid(row=4, column=3, sticky="ew")
+        add_tip(ttk.Button(body, text=self.tr("browse"), command=self._pick_dir),
+                self.tr("tip_browse_dir")).grid(row=4, column=3, sticky="ew")
 
         ttk.Label(body, text=self.tr("source")).grid(row=5, column=0, sticky="w", pady=(6, 0))
         self.source_var = tk.StringVar()
@@ -254,10 +307,12 @@ class Gdb2PostgisTool(ToolFrame):
         sb.pack(side="left", fill="y")
         selbtns = ttk.Frame(lay)
         selbtns.pack(anchor="w", pady=(4, 0))
-        ttk.Button(selbtns, text=self.tr("sel_all"),
-                   command=lambda: self.layers_list.selection_set(0, "end")).pack(side="left")
-        ttk.Button(selbtns, text=self.tr("sel_none"),
-                   command=lambda: self.layers_list.selection_clear(0, "end")).pack(side="left", padx=(4, 0))
+        add_tip(ttk.Button(selbtns, text=self.tr("sel_all"),
+                           command=lambda: self.layers_list.selection_set(0, "end")),
+                self.tr("tip_sel_all")).pack(side="left")
+        add_tip(ttk.Button(selbtns, text=self.tr("sel_none"),
+                           command=lambda: self.layers_list.selection_clear(0, "end")),
+                self.tr("tip_sel_none")).pack(side="left", padx=(4, 0))
 
         # --- PostGIS connection ---
         conn = ttk.LabelFrame(body, text=self.tr("conn"), padding=8)
@@ -277,9 +332,11 @@ class Gdb2PostgisTool(ToolFrame):
         ttk.Label(conn, text=self.tr("password")).grid(row=2, column=2, sticky="w", padx=4)
         ttk.Entry(conn, textvariable=self.pw_var, show="•", width=16).grid(row=2, column=3, sticky="w", padx=4)
         self.remember_pw = tk.BooleanVar(value=bool(cfg("password")))
-        ttk.Checkbutton(conn, text=self.tr("remember_pw"), variable=self.remember_pw).grid(
+        add_tip(ttk.Checkbutton(conn, text=self.tr("remember_pw"), variable=self.remember_pw),
+                self.tr("tip_remember_pw")).grid(
             row=3, column=0, columnspan=2, sticky="w", padx=4, pady=(4, 0))
-        ttk.Button(conn, text=self.tr("test_conn"), command=self._test_conn).grid(
+        add_tip(ttk.Button(conn, text=self.tr("test_conn"), command=self._test_conn),
+                self.tr("tip_test")).grid(
             row=3, column=2, columnspan=2, sticky="e", padx=4, pady=(4, 0))
 
         # --- Options ---
@@ -287,8 +344,9 @@ class Gdb2PostgisTool(ToolFrame):
         opts.grid(row=8, column=0, columnspan=4, sticky="ew", pady=(0, 8))
         ttk.Label(opts, text=self.tr("mode")).grid(row=0, column=0, sticky="w", padx=4)
         self.mode_var = tk.StringVar(value=cfg("mode", "overwrite"))
-        ttk.Combobox(opts, textvariable=self.mode_var, state="readonly", width=12,
-                     values=["overwrite", "append", "update"]).grid(row=0, column=1, sticky="w", padx=4)
+        add_tip(ttk.Combobox(opts, textvariable=self.mode_var, state="readonly", width=12,
+                             values=["overwrite", "append", "update"]),
+                self.tr("tip_mode")).grid(row=0, column=1, sticky="w", padx=4)
         ttk.Label(opts, text=self.tr("reproj")).grid(row=0, column=2, sticky="w", padx=4)
         self.tsrs_var = tk.StringVar(value=cfg("t_srs", ""))
         ttk.Entry(opts, textvariable=self.tsrs_var, width=14).grid(row=0, column=3, sticky="w", padx=4)
@@ -298,16 +356,20 @@ class Gdb2PostgisTool(ToolFrame):
         self.promote_var = tk.BooleanVar(value=cfg("promote", True))
         self.gist_var = tk.BooleanVar(value=cfg("gist", True))
         self.copy_var = tk.BooleanVar(value=cfg("copy", True))
-        ttk.Checkbutton(opts, text=self.tr("promote"), variable=self.promote_var).grid(row=2, column=0, columnspan=2, sticky="w", padx=4)
-        ttk.Checkbutton(opts, text=self.tr("gist"), variable=self.gist_var).grid(row=2, column=2, sticky="w", padx=4)
-        ttk.Checkbutton(opts, text=self.tr("copy"), variable=self.copy_var).grid(row=2, column=3, sticky="w", padx=4)
+        add_tip(ttk.Checkbutton(opts, text=self.tr("promote"), variable=self.promote_var),
+                self.tr("tip_promote")).grid(row=2, column=0, columnspan=2, sticky="w", padx=4)
+        add_tip(ttk.Checkbutton(opts, text=self.tr("gist"), variable=self.gist_var),
+                self.tr("tip_gist")).grid(row=2, column=2, sticky="w", padx=4)
+        add_tip(ttk.Checkbutton(opts, text=self.tr("copy"), variable=self.copy_var),
+                self.tr("tip_copy")).grid(row=2, column=3, sticky="w", padx=4)
 
         # --- Incremental sync ---
         incr = ttk.LabelFrame(body, text=self.tr("incr_group"), padding=8)
         incr.grid(row=9, column=0, columnspan=4, sticky="ew", pady=(0, 8))
         self.incr_var = tk.BooleanVar(value=cfg("incremental", False))
-        ttk.Checkbutton(incr, text=self.tr("incr_enable"), variable=self.incr_var,
-                        command=self._toggle_incr).grid(row=0, column=0, columnspan=2, sticky="w", padx=4)
+        add_tip(ttk.Checkbutton(incr, text=self.tr("incr_enable"), variable=self.incr_var,
+                                command=self._toggle_incr),
+                self.tr("tip_incr")).grid(row=0, column=0, columnspan=2, sticky="w", padx=4)
         self.deletes_var = tk.BooleanVar(value=cfg("detect_deletes", False))
         self.deletes_cb = ttk.Checkbutton(incr, text=self.tr("detect_deletes"),
                                           variable=self.deletes_var)
@@ -330,8 +392,9 @@ class Gdb2PostgisTool(ToolFrame):
         sched = ttk.LabelFrame(body, text=self.tr("sched_group"), padding=8)
         sched.grid(row=10, column=0, columnspan=4, sticky="ew", pady=(0, 8))
         self.sched_var = tk.BooleanVar(value=cfg("sched_on", False))
-        ttk.Checkbutton(sched, text=self.tr("sched_enable"), variable=self.sched_var,
-                        command=self._apply_schedule).grid(row=0, column=0, sticky="w", padx=4)
+        add_tip(ttk.Checkbutton(sched, text=self.tr("sched_enable"), variable=self.sched_var,
+                                command=self._apply_schedule),
+                self.tr("tip_sched")).grid(row=0, column=0, sticky="w", padx=4)
         self.every_var = tk.StringVar(value=str(cfg("sched_every", "1")))
         ttk.Spinbox(sched, from_=1, to=9999, width=6, textvariable=self.every_var).grid(
             row=0, column=1, sticky="w", padx=4)
@@ -342,8 +405,8 @@ class Gdb2PostgisTool(ToolFrame):
                                        width=10, values=list(self._unit_map))
         self.unit_combo.grid(row=0, column=2, sticky="w", padx=4)
         self._set_unit(cfg("sched_unit", "minutes"))
-        ttk.Button(sched, text=self.tr("sched_apply"), command=self._apply_schedule).grid(
-            row=0, column=3, sticky="w", padx=4)
+        add_tip(ttk.Button(sched, text=self.tr("sched_apply"), command=self._apply_schedule),
+                self.tr("tip_apply")).grid(row=0, column=3, sticky="w", padx=4)
         # ფონური გაშვება — GIS_BOX-ის დახურვის შემდეგაც (Windows Task Scheduler)
         self.bg_var = tk.BooleanVar(value=cfg("sched_bg", False))
         self.bg_cb = ttk.Checkbutton(sched, text=self.tr("bg_enable"),
@@ -364,10 +427,23 @@ class Gdb2PostgisTool(ToolFrame):
         self.import_btn.pack(side="left")
         self.cancel_btn = ttk.Button(act, text=self.tr("cancel"), command=self._cancel, state="disabled")
         self.cancel_btn.pack(side="left", padx=(6, 0))
-        ttk.Button(act, text=self.tr("remember"), command=self._remember).pack(side="left", padx=(12, 0))
-        ttk.Button(act, text=self.tr("history"), command=self._open_history).pack(side="left", padx=(6, 0))
+        add_tip(ttk.Button(act, text=self.tr("remember"), command=self._remember),
+                self.tr("tip_remember")).pack(side="left", padx=(12, 0))
+        add_tip(ttk.Button(act, text=self.tr("history"), command=self._open_history),
+                self.tr("tip_history")).pack(side="left", padx=(6, 0))
         self.progress = ttk.Progressbar(body, mode="indeterminate")
         self.progress.grid(row=12, column=0, columnspan=4, sticky="ew", pady=(8, 0))
+
+        # tooltip-ები ref-იან widget-ებზე
+        add_tip(self.source_combo, self.tr("tip_source"))
+        add_tip(self.layers_list, self.tr("tip_layers"))
+        add_tip(self.key_entry, self.tr("tip_key"))
+        add_tip(self.track_entry, self.tr("tip_track"))
+        add_tip(self.auto_btn, self.tr("tip_auto"))
+        add_tip(self.deletes_cb, self.tr("tip_deletes"))
+        add_tip(self.bg_cb, self.tr("tip_bg"))
+        add_tip(self.import_btn, self.tr("tip_import"))
+        add_tip(self.cancel_btn, self.tr("tip_cancel"))
 
         body.columnconfigure(1, weight=1)
         body.rowconfigure(6, weight=1)

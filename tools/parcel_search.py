@@ -50,6 +50,10 @@ PTR = {
     "sec_out":       {"en": "3. Output file", "ka": "3. შედეგის ფაილი"},
     "btn_search":    {"en": "🔍  Search", "ka": "🔍  ძებნა"},
     "btn_search_busy": {"en": "Working…", "ka": "მიმდინარეობს…"},
+    "btn_cancel":    {"en": "✖ Cancel", "ka": "✖ გაუქმება"},
+    "cancelling":    {"en": "Cancelling…", "ka": "უქმდება…"},
+    "cancelled":     {"en": "Search cancelled.", "ka": "ძებნა გაუქმდა."},
+    "progress":      {"en": "Progress: {i}/{n} blocks", "ka": "პროგრესი: {i}/{n} ბლოკი"},
     "out_create":    {"en": "💾 Create:", "ka": "💾 შექმნა:"},
     "chk_shp":       {"en": "Shapefile (.shp)", "ka": "Shapefile (.shp)"},
     "chk_gpkg":      {"en": "GeoPackage (.gpkg)", "ka": "GeoPackage (.gpkg)"},
@@ -210,12 +214,15 @@ def parse_manual_codes(text):
 # ---------------------------------------------------------------------------
 # ძებნის ლოგიკა (მუშაობს ცალკე thread-ში) — tr აპლიკაციის მიმდინარე ენას იყენებს
 # ---------------------------------------------------------------------------
-def run_search(gdb, layer, field, codes, out_path, log, done, tr, formats=("shp", "gpkg")):
+def run_search(gdb, layer, field, codes, out_path, log, done, tr,
+               formats=("shp", "gpkg"), progress=None, cancel=None):
     """
     log(msg)  -> სტატუსის ჩაწერა
     done(result_dict) -> დასრულებისას გამოძახება
     tr(key, **fmt) -> თარგმანი
     formats -> რომელი ფაილები შეიქმნას: ("shp", "gpkg"); ცარიელი => მხოლოდ ძებნა
+    progress(i, n) -> პროგრესის განახლება (არჩევით)
+    cancel() -> True თუ მომხმარებელმა გააუქმა (არჩევით)
     """
     formats = set(formats or ())
     try:
@@ -242,6 +249,9 @@ def run_search(gdb, layer, field, codes, out_path, log, done, tr, formats=("shp"
         total_chunks = (len(requested) + CHUNK_SIZE - 1) // CHUNK_SIZE
 
         for idx, chunk in enumerate(chunked(requested, CHUNK_SIZE), start=1):
+            if cancel and cancel():                 # მომხმარებელმა გააუქმა
+                done({"cancelled": True})
+                return
             vals = ",".join("'" + c.replace("'", "''") + "'" for c in chunk)
             where = f'"{field}" IN ({vals})'
             gdf = pyogrio.read_dataframe(gdb, layer=layer, where=where)
@@ -250,6 +260,8 @@ def run_search(gdb, layer, field, codes, out_path, log, done, tr, formats=("shp"
                 for v in gdf[field].tolist():
                     found_norm.add(normalize(v))
             log(tr("rs_block", i=idx, n=total_chunks, k=len(found_norm)))
+            if progress:
+                progress(idx, total_chunks)
 
         not_found = [c for c in requested if c not in found_norm]
         found_list = [c for c in requested if c in found_norm]
@@ -330,6 +342,7 @@ class ParcelSearchTool(ToolFrame):
     def build(self):
         self.msg_queue = queue.Queue()
         self.searching = False
+        self._cancel_event = threading.Event()
         self.last_not_found = []
         st = self._state()                       # transient (სესიის ფარგლებში)
         saved = self.app.get_tool_config(self.tid)  # მუდმივი (git-ignored ფაილი)
@@ -415,9 +428,16 @@ class ParcelSearchTool(ToolFrame):
         ttk.Checkbutton(fmt_row, text=tr("chk_gpkg"), variable=self.gpkg_var).pack(side="left")
         out.columnconfigure(0, weight=1)
 
-        # --- ღილაკი ---
-        self.search_btn = ttk.Button(self, text=tr("btn_search"), command=self._start_search)
-        self.search_btn.pack(fill="x", padx=8, pady=6)
+        # --- ღილაკი + გაუქმება + პროგრესი ---
+        btn_row = ttk.Frame(self)
+        btn_row.pack(fill="x", padx=8, pady=6)
+        self.search_btn = ttk.Button(btn_row, text=tr("btn_search"), command=self._start_search)
+        self.search_btn.pack(side="left", fill="x", expand=True)
+        self.cancel_btn = ttk.Button(btn_row, text=tr("btn_cancel"),
+                                     command=self._cancel_search, state="disabled")
+        self.cancel_btn.pack(side="left", padx=(6, 0))
+        self.progress = ttk.Progressbar(self, mode="determinate")
+        self.progress.pack(fill="x", padx=8)
 
         # --- შედეგები / ლოგი ---
         res = ttk.LabelFrame(self, text=tr("sec_result"))
@@ -624,7 +644,10 @@ class ParcelSearchTool(ToolFrame):
         self.log_text.configure(state="disabled")
 
         self.searching = True
+        self._cancel_event.clear()
         self.search_btn.configure(state="disabled", text=self.tr("btn_search_busy"))
+        self.cancel_btn.configure(state="normal")
+        self.progress.configure(value=0, maximum=100)
         self.status.set(self.tr("searching"))
 
         t = threading.Thread(
@@ -632,10 +655,18 @@ class ParcelSearchTool(ToolFrame):
             args=(gdb, layer, field, codes, out_path,
                   lambda m: self.msg_queue.put(("log", m)),
                   lambda r: self.msg_queue.put(("done", r)),
-                  self.tr, formats),
+                  self.tr, formats,
+                  lambda i, n: self.msg_queue.put(("progress", (i, n))),
+                  self._cancel_event.is_set),
             daemon=True,
         )
         t.start()
+
+    def _cancel_search(self):
+        if self.searching:
+            self._cancel_event.set()
+            self.cancel_btn.configure(state="disabled")
+            self.status.set(self.tr("cancelling"))
 
     # ---- queue / ლოგი ----
     def _poll_queue(self):
@@ -647,6 +678,10 @@ class ParcelSearchTool(ToolFrame):
                 kind, payload = self.msg_queue.get_nowait()
                 if kind == "log":
                     self._log(payload)
+                elif kind == "progress":
+                    i, n = payload
+                    self.progress.configure(maximum=n, value=i)
+                    self.status.set(self.tr("progress", i=i, n=n))
                 elif kind == "done":
                     self._on_done(payload)
         except queue.Empty:
@@ -663,8 +698,16 @@ class ParcelSearchTool(ToolFrame):
     def _on_done(self, result):
         self.searching = False
         self.search_btn.configure(state="normal", text=self.tr("btn_search"))
+        self.cancel_btn.configure(state="disabled")
+
+        if result.get("cancelled"):
+            self.progress.configure(value=0)
+            self.status.set(self.tr("cancelled"))
+            self._log("— " + self.tr("cancelled"))
+            return
 
         if "error" in result:
+            self.progress.configure(value=0)
             self.status.set(self.tr("err") + ".")
             self._log(self.tr("done_err_hdr"))
             self._log(result["error"])

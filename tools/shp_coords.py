@@ -95,6 +95,13 @@ RTR = {
                   "ka": "ჯერ აირჩიე წერტილოვანი shapefile."},
     "need_zone": {"en": "Could not detect the UTM zone — please choose 37 or 38.",
                   "ka": "UTM ზონა ვერ ცნობა — აირჩიე 37 ან 38."},
+    "no_crs_q":  {"en": "This shapefile has no CRS (.prj). Coordinates will be "
+                        "used as-is, treated as UTM zone {z}. Continue?",
+                  "ka": "ამ shapefile-ს კოორდინატთა სისტემა (.prj) არ აქვს. "
+                        "კოორდინატები გამოყენებული იქნება როგორც არის — UTM ზონა {z}. "
+                        "გავაგრძელო?"},
+    "no_crs_warn":{"en": "no CRS (.prj) — coordinates used as UTM zone {z}",
+                   "ka": "CRS (.prj) არ არის — კოორდინატები UTM ზონა {z}-ად"},
     "no_points": {"en": "The shapefile has no points.",
                   "ka": "shapefile-ში წერტილები არ არის."},
     "found_shp": {"en": "Found {n} point shapefile(s).",
@@ -363,6 +370,15 @@ class ShpCoordsTool(ToolFrame):
         except Exception:
             return 0
 
+    @staticmethod
+    def _crs_missing(shp):
+        """True — თუ shapefile-ს კოორდინატთა სისტემა (.prj/CRS) არ აქვს."""
+        try:
+            import pyogrio
+            return not pyogrio.read_info(shp).get("crs")
+        except Exception:
+            return False
+
     def _read_points(self, shp, zone):
         """დააბრუნებს [(id, x, y), …] მითითებული ზონის კოორდინატებში."""
         import geopandas as gpd
@@ -435,6 +451,11 @@ class ShpCoordsTool(ToolFrame):
         if zone not in (37, 38):
             messagebox.showwarning("GIS_BOX", self.tr("need_zone"))
             return
+        # CRS-ის გარეშე shapefile — გავაფრთხილოთ, რომ კოორდინატები დაუშვებლად
+        # ჩაითვლება არჩეულ ზონად.
+        if self._crs_missing(shp):
+            if not messagebox.askyesno("GIS_BOX", self.tr("no_crs_q", z=zone)):
+                return
 
         try:
             points = self._read_points(shp, zone)
@@ -503,6 +524,8 @@ class ShpCoordsTool(ToolFrame):
                 self.app.log(f"↷ {self.tr('batch_skip')} {name}")
                 skipped += 1
                 continue
+            if self._crs_missing(shp):          # batch-ში მხოლოდ ვაფრთხილებთ
+                self.app.log(f"⚠ {name}: {self.tr('no_crs_warn', z=zone)}")
             try:
                 points = self._read_points(shp, zone)
             except Exception as e:

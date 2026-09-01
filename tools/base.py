@@ -8,9 +8,12 @@
 
 from tkinter import ttk
 
+from tools.i18n import translate
+
 
 class ToolFrame(ttk.Frame):
     key = "tool"          # თარგმანის key სათაურისთვის
+    CATALOG = {}          # ხელსაწყოს თარგმანების catalog (თითო ხელსაწყო აყენებს)
 
     def __init__(self, master, app):
         super().__init__(master, padding=16)
@@ -27,6 +30,10 @@ class ToolFrame(ttk.Frame):
     # მოკლე დამხმარეები
     def t(self, key):
         return self.app.t(key)
+
+    def tr(self, key, **fmt):
+        """ხელსაწყოს CATALOG-ის თარგმანი მიმდინარე ენით (COMMON fallback-ით)."""
+        return translate(self.CATALOG, key, self.app.lang, **fmt)
 
     def log(self, msg):
         self.app.log(msg)

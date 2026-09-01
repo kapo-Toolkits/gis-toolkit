@@ -97,11 +97,7 @@ RTR = {
 
 class RenameTransliterateTool(ToolFrame):
     tid = "rename_translit"
-
-    def tr(self, key, **fmt):
-        entry = RTR.get(key, {})
-        s = entry.get(self.app.lang) or entry.get("en") or key
-        return s.format(**fmt) if fmt else s
+    CATALOG = RTR          # tr() მოდის ToolFrame-იდან (საერთო lookup)
 
     def _state(self):
         return self.app.tool_state.setdefault(self.tid, {})

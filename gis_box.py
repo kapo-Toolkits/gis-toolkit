@@ -112,6 +112,7 @@ THEMES = {
 # ToolFrame გატანილია tools/base.py-ში, რომ ხელსაწყოებმაც და აქაც ერთი კლასი
 # გამოიყენონ (gis_box __main__-ის ხელახლა იმპორტის გარეშე).
 from tools.base import ToolFrame
+from tools.i18n import translate
 
 
 # ---- ინსტრუმენტი: შაბლონის კოპირება (პარამეტრიზებული) ---------------------
@@ -448,7 +449,7 @@ class GisBoxApp(tk.Tk):
 
     # --- თარგმანი ---
     def t(self, key):
-        return TR.get(key, {}).get(self.lang, key)
+        return translate(TR, key, self.lang)
 
     @property
     def palette(self):

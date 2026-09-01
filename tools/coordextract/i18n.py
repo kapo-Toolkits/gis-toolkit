@@ -144,10 +144,11 @@ TR = {
 }
 
 
+from ..i18n import translate
+
+
 def make_tr(lang="en"):
-    """დააბრუნებს tr(key, **fmt) ფუნქციას მოცემული ენისთვის."""
+    """დააბრუნებს tr(key, **fmt) ფუნქციას მოცემული ენისთვის (საერთო lookup)."""
     def tr(key, **fmt):
-        entry = TR.get(key, {})
-        s = entry.get(lang) or entry.get("en") or key
-        return s.format(**fmt) if fmt else s
+        return translate(TR, key, lang, **fmt)
     return tr

@@ -170,12 +170,7 @@ from tools.search_core import (CHUNK_SIZE, normalize, chunked,
 # ---------------------------------------------------------------------------
 class ParcelSearchTool(ToolFrame):
     tid = "parcel_search"
-
-    def tr(self, key, **fmt):
-        """თარგმანი GIS_BOX-ის მიმდინარე ენით."""
-        entry = PTR.get(key, {})
-        s = entry.get(self.app.lang) or entry.get("en") or key
-        return s.format(**fmt) if fmt else s
+    CATALOG = PTR          # tr() მოდის ToolFrame-იდან (საერთო lookup)
 
     def _state(self):
         return self.app.tool_state.setdefault(self.tid, {})

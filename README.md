@@ -17,7 +17,48 @@ The UI is **bilingual** — Georgian / English (top-bar switch).
 | **კოორდინატების ამომღები** / Coordinate extractor | რუკის სურათიდან/PDF-იდან ამოიღებს კოორდინატების ცხრილს (OCR) ან გეო-რეფერენსით ითვლის პოლიგონის წვეროებსა და ფართობს; Excel-ში გატანა და ფორმატირება. |
 | **სახელების გადარქმევა** / Rename → Latin | საქაღალდის ქართულ-სახელიან shapefile-ებს გადაარქმევს ლათინურად (სფეისი/სიმბოლო → `_`), წინასწარი სიით. ასევე ამოწმებს რომელ shapefile-ში დევს მასალა და რომელი ცარიელია. |
 | **Shp → კოორდინატები** / Shp → coordinates | წერტილოვანი shapefile-იდან კითხულობს X/Y-ს UTM ზონით (37/38, .prj-დან ან ხელით), წინასწარი ცხრილით; გააქვს დაფორმატებულ Excel-ში — ტექსტური ქუდი, `№/X/Y`, არჩევითი „გადაკვეთის კუთხე“ (°), center+borders. **Batch** — საქაღალდის ყველა წერტილოვანი shapefile ერთბაშად. |
-| **GDB → PostGIS** / GDB → PostGIS | ატანს ESRI Geodatabase-ის (`.gdb`/`.mdb`) შრეებს PostgreSQL/PostGIS-ში `ogr2ogr`-ით — შრეების არჩევა, კავშირის შემოწმება, რეჟიმები (overwrite/append/update), რეპროექცია, **ინკრემენტული სინქრონი** (key/change ველებით, watermark-ით; მხოლოდ ცვლილებების upsert), **განრიგი** (ავტომატური გაშვება ინტერვალით, დამოკიდებულების გარეშე) და **ისტორია/აუდიტი** (ყოველი გაშვება თარიღით, ID-ებით; ბაზიდან წაშლის შესაძლებლობით). სჭირდება GDAL (QGIS/OSGeo4W) და PostGIS ბაზა. |
+| **GDB → PostGIS** / GDB → PostGIS | ატანს ESRI Geodatabase-ის (`.gdb`/`.mdb`) შრეებს PostgreSQL/PostGIS-ში `ogr2ogr`-ით — შრეების არჩევა, კავშირის შემოწმება, რეჟიმები (overwrite/append/update), რეპროექცია, **ინკრემენტული სინქრონი**, **განრიგი** და **ისტორია/აუდიტი**. სჭირდება GDAL (QGIS/OSGeo4W) და PostGIS ბაზა. → იხ. [ცალკე სექცია](#gdb--postgis). |
+
+---
+
+## GDB → PostGIS
+
+ESRI File/Personal Geodatabase-ის (`.gdb` / `.mdb`) შრეების PostgreSQL/PostGIS-ში
+ატანა `ogr2ogr`-ით. ძრავა აღებულია დამოუკიდებელი MIT პროექტიდან (`gdb2postgis`) და
+GIS_BOX-ში ჩაშენებულია **native tkinter**-ით — ახალი pip-პაკეტის გარეშე.
+
+Loads ESRI File/Personal Geodatabase (`.gdb` / `.mdb`) layers into PostgreSQL/PostGIS
+with `ogr2ogr`. The engine is reused from the standalone MIT `gdb2postgis` project and
+embedded natively in tkinter — no extra pip dependency.
+
+**მოთხოვნები / Requirements**
+- GDAL-ის `ogr2ogr` / `ogrinfo` სისტემაში (მაგ. **QGIS** ან **OSGeo4W**) — ავტომატურად აღმოაჩენს.
+- ხელმისაწვდომი **PostgreSQL/PostGIS** ბაზა.
+
+**ფუნქციები / Features**
+- **წყარო + შრეები** — მიუთითებ საქაღალდეს, ირჩევ `.gdb`/`.mdb`-ს და მონიშნავ ასატან შრეებს.
+- **კავშირი** — host / port / database / user / password / schema; ღილაკი „კავშირის შემოწმება“.
+- **რეჟიმები** — `overwrite` / `append` / `update`; რეპროექცია (`EPSG:…`), ცხრილის პრეფიქსი,
+  PROMOTE_TO_MULTI, GiST ინდექსი, სწრაფი COPY.
+- **ინკრემენტული სინქრონი** — მხოლოდ ცვლილებების ატანა: `key` ველით (მაგ. `OBJECTID`) და
+  `change` ველით (მაგ. `last_edited_date`), watermark-ის მიხედვით (ველების ავტო-აღმოჩენით);
+  არჩევით — წაშლილების დეტექცია. პირველი გაშვება = სრული load + watermark; შემდეგ = მხოლოდ
+  `change > watermark` რიგები, upsert-ით.
+- **განრიგი** — ავტომატური გაშვება ყოველ N წუთი/საათი/დღეში (tkinter `after()`, გარე
+  დამოკიდებულების გარეშე); „შემდეგი გაშვების“ ჩვენებით, overlap-ის გარეშე.
+- **ისტორია / აუდიტი** — „🕘 ისტორია…“: თარიღით ნახავ ყოველ გაშვებას (რამდენი ობიექტი,
+  მათი ID-ებით), წაშლი ჩანაწერს, ან ამ ობიექტებს ბაზიდანაც მოაშორებ.
+
+**უსაფრთხოება / Security**
+- კავშირის პარამეტრები ინახება ლოკალურ `gis_box_settings.json`-ში (git-ignored).
+  **პაროლი ნაგულისხმევად მხოლოდ სესიაშია** — ინახება მხოლოდ თოლიის მონიშვნისას, ლოკალურად.
+- watermark-ები და აუდიტი ლოკალურ, **git-ignored** ფაილებშია
+  (`gdb2postgis_sync_state.json`, `gdb2postgis_audit.db`) — რეპოზე არასდროს ადის.
+  პაროლი ლოგებში ინიღბება.
+
+Connection settings live in a git-ignored `gis_box_settings.json`; the **password is
+session-only by default** (stored locally only if you tick the box). Sync watermarks and
+the audit history are kept in git-ignored files and never committed; passwords are masked in logs.
 
 ---
 

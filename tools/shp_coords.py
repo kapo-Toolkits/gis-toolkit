@@ -723,7 +723,8 @@ class ShpCoordsTool(ToolFrame):
         # უბრალო ცხრილი — ჩარჩოები + ცენტრირება, ფონის/ფერის გარეშე (როგორც არის)
         bd = "border:1px solid #000;"
         ce = "text-align:center;vertical-align:middle;padding:2px 10px;"
-        html = ['<table style="border-collapse:collapse;'
+        html = ['<table border="1" cellspacing="0" cellpadding="4" '
+                'style="border-collapse:collapse;'
                 'font-family:Sylfaen,Segoe UI,sans-serif;font-size:11pt;">']
         if template:
             html.append(f'<tr><td colspan="{ncols}" '

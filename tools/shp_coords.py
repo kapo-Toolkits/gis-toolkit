@@ -24,6 +24,7 @@ from tkinter import ttk, filedialog, messagebox
 from tools.base import ToolFrame
 from tools.tooltip import add_tip
 from tools.translit import lat_to_geo
+from tools.clipboard_html import copy_table
 from tools.xlsx_format import FileLockedError, save_workbook
 
 # ცნობილი სახელის ნიმუშები, რომლებსაც ავტომატურად ვირჩევთ
@@ -161,6 +162,15 @@ RTR = {
                    "ka": "„გადაკვეთის კუთხე“ სვეტი ° (გრადუსი) ფორმატით."},
     "tip_export": {"en": "Export the selected shapefile to a formatted Excel file.",
                    "ka": "არჩეული shapefile-ის ექსპორტი დაფორმატებულ Excel-ში."},
+    "clip":       {"en": "📋 Copy", "ka": "📋 კოპირება"},
+    "tip_clip":   {"en": "Copy the formatted block (header + bordered №/X/Y) to the "
+                        "clipboard — paste directly into Word/Excel.",
+                   "ka": "დაფორმატებული ბლოკის (ქუდი + ჩარჩოებიანი №/X/Y) კოპირება "
+                        "ბუფერში — Word/Excel-ში პირდაპირ ჩააფეისთე."},
+    "clip_done":  {"en": "Copied to clipboard ({n} rows).",
+                   "ka": "დაკოპირდა ბუფერში ({n} რიგი)."},
+    "clip_fail":  {"en": "Could not copy to clipboard.",
+                   "ka": "ბუფერში კოპირება ვერ მოხერხდა."},
     "tip_preview":{"en": "Preview the coordinate table before export.",
                    "ka": "კოორდინატების ცხრილის წინასწარ ნახვა ექსპორტამდე."},
     "tip_batch":  {"en": "Export every point shapefile in the folder at once.",
@@ -338,6 +348,8 @@ class ShpCoordsTool(ToolFrame):
         actions.grid(row=10, column=0, columnspan=3, sticky="w")
         add_tip(ttk.Button(actions, text=self.tr("export"), command=self._export),
                 self.tr("tip_export")).pack(side="left")
+        add_tip(ttk.Button(actions, text=self.tr("clip"), command=self._copy_clipboard),
+                self.tr("tip_clip")).pack(side="left", padx=(4, 0))
         add_tip(ttk.Button(actions, text=self.tr("preview"), command=self._preview),
                 self.tr("tip_preview")).pack(side="left", padx=(12, 0))
         add_tip(ttk.Button(actions, text=self.tr("batch"), command=self._batch),
@@ -667,6 +679,77 @@ class ShpCoordsTool(ToolFrame):
             except ValueError:
                 angle_all = None
         return template, self.angle_var.get(), angle_all, self.vtype_var.get()
+
+    def _block_rows(self, points, vtype, angle_on, angle_all):
+        """(headers, rows) — ზუსტად ის, რაც Excel-ის ასლში (° კუთხეზე)."""
+        headers = ["№", "X", "Y"] + ([self.tr("angle_hdr")] if angle_on else [])
+        rows = []
+        for i, (_idv, x, y) in enumerate(points, 1):
+            xv = int(round(x)) if vtype == "int" else float(x)
+            yv = int(round(y)) if vtype == "int" else float(y)
+            row = [i, xv, yv]
+            if angle_on:
+                row.append(f"{angle_all}°" if angle_all is not None else "")
+            rows.append(row)
+        return headers, rows
+
+    def _copy_clipboard(self):
+        """შექმნილი ბლოკის (ქუდი + ჩარჩოებიანი №/X/Y) კოპირება ბუფერში —
+        HTML-ად (Word/Excel-ში ფორმატით ჩაისმება) + ტექსტად (fallback)."""
+        shp = self._shp_map.get(self.shp_var.get())
+        if not shp:
+            messagebox.showwarning("GIS_BOX", self.tr("pick_shp"))
+            return
+        zone = self._resolve_zone(shp)
+        if zone not in (37, 38):
+            messagebox.showwarning("GIS_BOX", self.tr("need_zone"))
+            return
+        try:
+            points = self._read_points(shp, zone)
+        except Exception as e:
+            messagebox.showerror(self.tr("err"), f"{self.tr('load_err')}\n{e}")
+            return
+        if not points:
+            messagebox.showwarning("GIS_BOX", self.tr("no_points"))
+            return
+
+        template, angle_on, angle_all, vtype = self._current_settings()
+        headers, rows = self._block_rows(points, vtype, angle_on, angle_all)
+        ncols = len(headers)
+
+        def esc(v):
+            return (str(v).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"))
+
+        bd = "border:1px solid #000;"
+        ce = "text-align:center;vertical-align:middle;padding:2px 10px;"
+        html = ['<table style="border-collapse:collapse;'
+                'font-family:Sylfaen,Segoe UI,sans-serif;font-size:11pt;">']
+        if template:
+            html.append(f'<tr><td colspan="{ncols}" '
+                        f'style="{bd}{ce}font-weight:bold;">{esc(template)}</td></tr>')
+        html.append("<tr>" + "".join(
+            f'<td style="{bd}{ce}font-weight:bold;">{esc(h)}</td>' for h in headers) + "</tr>")
+        for row in rows:
+            html.append("<tr>" + "".join(
+                f'<td style="{bd}{ce}">{esc(c)}</td>' for c in row) + "</tr>")
+        html.append("</table>")
+        fragment = "".join(html)
+
+        # ტექსტი (TSV) — fallback
+        lines = []
+        if template:
+            lines.append(template)
+        lines.append("\t".join(str(h) for h in headers))
+        for row in rows:
+            lines.append("\t".join(str(c) for c in row))
+        text = "\r\n".join(lines)
+
+        if copy_table(fragment, text, widget=self):
+            msg = self.tr("clip_done", n=len(rows))
+            self.app.log("— " + msg)
+            self.app.log(msg)
+        else:
+            messagebox.showerror(self.tr("err"), self.tr("clip_fail"))
 
     # ---- Batch: საქაღალდის ყველა წერტილოვანი shapefile ერთბაშად ----
     def _batch(self):

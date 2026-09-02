@@ -3,11 +3,20 @@
 
 import struct
 
-from tools.translit import transliterate, feature_count
+from tools.translit import transliterate, feature_count, lat_to_geo
 
 
 def test_basic():
     assert transliterate("არსებული საყრდენი.shp") == "arsebuli_sayrdeni.shp"
+
+
+def test_lat_to_geo():
+    assert lat_to_geo("gamarjoba") == "გამარჯობა"
+    assert lat_to_geo("teqsti") == "ტექსტი"
+    assert lat_to_geo("qarTul") == "ქართულ"      # T→თ, t→ტ
+    assert lat_to_geo("mWirdeba") == "მჭირდება"   # W→ჭ
+    # non-letters pass through unchanged
+    assert lat_to_geo("zona 37 (a)") == "ზონა 37 (ა)"
 
 
 def test_double_extension_preserved():

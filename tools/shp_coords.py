@@ -23,6 +23,7 @@ from tkinter import ttk, filedialog, messagebox
 
 from tools.base import ToolFrame
 from tools.tooltip import add_tip
+from tools.translit import lat_to_geo
 from tools.xlsx_format import FileLockedError, save_workbook
 
 # ცნობილი სახელის ნიმუშები, რომლებსაც ავტომატურად ვირჩევთ
@@ -74,6 +75,11 @@ RTR = {
     "tmpl_add_q":{"en": "New header template text:", "ka": "ახალი ქუდის ტექსტი:"},
     "dlg_ok":    {"en": "OK", "ka": "დიახ"},
     "dlg_cancel":{"en": "Cancel", "ka": "გაუქმება"},
+    "conv_hint": {"en": "Type in Latin — it is converted to Georgian below "
+                        "(t→ტ, T→თ, q→ქ, W→ჭ, S→შ, C→ჩ …).",
+                  "ka": "აკრიფე ლათინურით — ქვემოთ ქართულად გადაკეთდება "
+                        "(t→ტ, T→თ, q→ქ, W→ჭ, S→შ, C→ჩ …)."},
+    "conv_geo":  {"en": "Georgian:", "ka": "ქართულად:"},
     "tmpl_file": {"en": "📄 File", "ka": "📄 ფაილი"},
     "tip_tmpl_file": {"en": "Edit the header templates in a text file (UTF-8) — "
                             "type Georgian in Notepad, then reopen the dropdown.",
@@ -339,23 +345,33 @@ class ShpCoordsTool(ToolFrame):
             self.tmpl_var.set(vals[0])
 
     def _ask_text(self, prompt, initial=""):
-        """ტექსტის შეყვანის მოდალი — ჩვენი ttk.Entry-ით (ქართული სწორად ჩანს,
-        simpledialog-ის ??? პრობლემის გარეშე). Sylfaen ფონტი ქართულს უჭერს მხარს."""
+        """ლათინური→ქართული კონვერტერ-მოდალი: მომხმარებელი აკრეფს ლათინურით
+        (ASCII — Tk-ის ??? პრობლემა არ ეხება), ქვემოთ ცოცხლად ჩნდება ქართული,
+        და OK-ზე ბრუნდება ქართული ტექსტი."""
+        pal = self.app.palette
         dlg = tk.Toplevel(self)
         dlg.title("GIS_BOX")
         dlg.transient(self.winfo_toplevel())
         dlg.resizable(False, False)
         frm = ttk.Frame(dlg, padding=12)
         frm.pack(fill="both", expand=True)
-        ttk.Label(frm, text=prompt, wraplength=460).pack(anchor="w")
-        var = tk.StringVar(value=initial)
-        ent = ttk.Entry(frm, textvariable=var, width=60, font=("Sylfaen", 11))
-        ent.pack(fill="x", pady=(6, 10))
+        ttk.Label(frm, text=prompt, wraplength=480).pack(anchor="w")
+        ttk.Label(frm, text=self.tr("conv_hint"), foreground=pal["muted"],
+                  wraplength=480, justify="left").pack(anchor="w", pady=(2, 4))
+        lat_var = tk.StringVar(value=initial)
+        ent = ttk.Entry(frm, textvariable=lat_var, width=64, font=("Consolas", 11))
+        ent.pack(fill="x", pady=(0, 6))
         ent.focus_set()
+        ttk.Label(frm, text=self.tr("conv_geo")).pack(anchor="w")
+        geo_var = tk.StringVar()
+        ttk.Label(frm, textvariable=geo_var, font=("Sylfaen", 13),
+                  wraplength=480, justify="left").pack(anchor="w", pady=(0, 10))
+        lat_var.trace_add("write", lambda *a: geo_var.set(lat_to_geo(lat_var.get())))
+        geo_var.set(lat_to_geo(lat_var.get()))
         out = {"v": None}
 
         def ok(_e=None):
-            out["v"] = var.get().strip()
+            out["v"] = geo_var.get().strip()
             dlg.destroy()
 
         btns = ttk.Frame(frm)

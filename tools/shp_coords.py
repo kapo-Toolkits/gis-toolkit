@@ -174,12 +174,23 @@ class ShpCoordsTool(ToolFrame):
     # ---- შენახული ტექსტური შაბლონები ----
     @staticmethod
     def _file_templates():
-        """გარე ფაილიდან ქუდები (UTF-8, თითო ხაზზე ერთი)."""
+        """გარე ფაილიდან ქუდები. მედეგია კოდირებაზე: utf-8-sig (BOM) → utf-8 →
+        cp1251 → cp1252 (Notepad-ის ANSI-ს შემთხვევაშიც წაიკითხავს)."""
         try:
-            with open(TEMPLATES_FILE, "r", encoding="utf-8") as f:
-                return [ln.strip() for ln in f if ln.strip() and not ln.startswith("#")]
+            data = open(TEMPLATES_FILE, "rb").read()
         except OSError:
             return []
+        text = None
+        for enc in ("utf-8-sig", "utf-8", "cp1251", "cp1252"):
+            try:
+                text = data.decode(enc)
+                break
+            except UnicodeDecodeError:
+                continue
+        if text is None:
+            return []
+        return [ln.strip() for ln in text.splitlines()
+                if ln.strip() and not ln.startswith("#")]
 
     def _templates(self):
         """ნაგულისხმევი + გარე ფაილი + შენახული — გაერთიანებული (დუბლ. გარეშე)."""
@@ -274,8 +285,11 @@ class ShpCoordsTool(ToolFrame):
         ttk.Label(trow, text=self.tr("tmpl")).pack(side="left")
         self.tmpl_var = tk.StringVar(value=st.get("template", self.tr("tmpl_none")))
         # postcommand — ჩამოსაშლელის გახსნისას ფაილიდან ხელახლა იკითხება
+        # ქართული ფონტი — ზოგ Windows-ზე combobox-ის ნაგულისხმევი ფონტი ქართულს
+        # ვერ აჩვენებს („????“); Sylfaen უჭერს მხარს.
         self.tmpl_combo = ttk.Combobox(trow, textvariable=self.tmpl_var, width=48,
-                                       postcommand=self._refresh_templates)
+                                       postcommand=self._refresh_templates,
+                                       font=("Sylfaen", 11))
         self.tmpl_combo.pack(side="left", fill="x", expand=True, padx=(6, 6))
         self._refresh_templates()
         add_tip(ttk.Button(trow, text=self.tr("tmpl_add"), command=self._add_template),

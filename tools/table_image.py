@@ -36,15 +36,19 @@ def _wrap(draw, text, font, max_w):
     return lines
 
 
-def render_table(title, headers, rows, scale=3, transparent=True):
+def render_table(title, headers, rows, scale=6, transparent=True, supersample=2):
     """ბლოკის სურათი. title — ქუდი ("" თუ არაა); headers/rows — ცხრილი.
-    transparent=True — ფონის გარეშე (RGBA), მხოლოდ ჩარჩოები/ტექსტი."""
+    transparent=True — ფონის გარეშე (RGBA), მხოლოდ ჩარჩოები/ტექსტი.
+
+    მაღალი გარჩევადობა (scale) + supersample (2x რენდერი → LANCZOS-ით ჩამოსწორება)
+    — გლუვი, მკვეთრი ტექსტი (layout-ში გადიდებისასაც არ ხეშდება)."""
     from PIL import Image, ImageDraw
 
-    fs = 16 * scale
-    pad_x = 14 * scale               # ჰორიზონტ. padding — განიერი სვეტები (ქუდი ~3 ხაზზე)
-    pad_y = 5 * scale                # ვერტიკ. padding — კომპაქტური რიგები
-    bw = max(1, round(scale * 0.6))  # თხელი ჩარჩო
+    s = scale * max(1, supersample)  # შიდა (გადიდებული) რენდერის მასშტაბი
+    fs = 16 * s
+    pad_x = 14 * s                   # ჰორიზონტ. padding — განიერი სვეტები (ქუდი ~3 ხაზზე)
+    pad_y = 5 * s                    # ვერტიკ. padding — კომპაქტური რიგები
+    bw = max(1, round(s * 0.55))     # თხელი ჩარჩო
     font = _font(fs)
     tmp = ImageDraw.Draw(Image.new("RGB", (10, 10)))
 
@@ -102,4 +106,9 @@ def render_table(title, headers, rows, scale=3, transparent=True):
             cell(x, y, col_w[j], row_h, row[j])
             x += col_w[j]
         y += row_h
+
+    if supersample and supersample > 1:  # 2x → LANCZOS: გლუვი, მკვეთრი
+        img = img.resize((round(img.width / supersample),
+                          round(img.height / supersample)),
+                         resample=Image.LANCZOS)
     return img

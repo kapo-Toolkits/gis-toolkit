@@ -72,6 +72,48 @@ def _set_windows_clipboard(fragment, text):
     return True
 
 
+def copy_image(pil_image):
+    """PIL.Image-ის კოპირება გაცვლის ბუფერში (Windows CF_DIB). True/False."""
+    if sys.platform != "win32":
+        return False
+    try:
+        import io
+        import ctypes
+        from ctypes import wintypes
+
+        out = io.BytesIO()
+        pil_image.convert("RGB").save(out, "BMP")
+        dib = out.getvalue()[14:]           # BMP ფაილის 14-ბაიტიანი header-ის მოცილება → DIB
+
+        user32 = ctypes.windll.user32
+        kernel32 = ctypes.windll.kernel32
+        kernel32.GlobalAlloc.restype = ctypes.c_void_p
+        kernel32.GlobalAlloc.argtypes = [wintypes.UINT, ctypes.c_size_t]
+        kernel32.GlobalLock.restype = ctypes.c_void_p
+        kernel32.GlobalLock.argtypes = [ctypes.c_void_p]
+        kernel32.GlobalUnlock.argtypes = [ctypes.c_void_p]
+        user32.OpenClipboard.argtypes = [ctypes.c_void_p]
+        user32.SetClipboardData.restype = ctypes.c_void_p
+        user32.SetClipboardData.argtypes = [wintypes.UINT, ctypes.c_void_p]
+
+        CF_DIB = 8
+        GMEM_MOVEABLE = 0x0002
+        if not user32.OpenClipboard(0):
+            return False
+        try:
+            user32.EmptyClipboard()
+            h = kernel32.GlobalAlloc(GMEM_MOVEABLE, len(dib))
+            p = kernel32.GlobalLock(h)
+            ctypes.memmove(p, dib, len(dib))
+            kernel32.GlobalUnlock(h)
+            user32.SetClipboardData(CF_DIB, h)
+        finally:
+            user32.CloseClipboard()
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def copy_table(fragment, text, widget=None):
     """ცხრილის კოპირება: HTML (Windows) + ტექსტი. აბრუნებს True/False."""
     if sys.platform == "win32":

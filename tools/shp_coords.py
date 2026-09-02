@@ -24,7 +24,7 @@ from tkinter import ttk, filedialog, messagebox
 from tools.base import ToolFrame
 from tools.tooltip import add_tip
 from tools.translit import lat_to_geo
-from tools.clipboard_html import copy_table
+from tools.clipboard_html import copy_table, copy_image
 from tools.xlsx_format import FileLockedError, save_workbook
 
 # ცნობილი სახელის ნიმუშები, რომლებსაც ავტომატურად ვირჩევთ
@@ -171,6 +171,13 @@ RTR = {
                    "ka": "დაკოპირდა ბუფერში ({n} რიგი)."},
     "clip_fail":  {"en": "Could not copy to clipboard.",
                    "ka": "ბუფერში კოპირება ვერ მოხერხდა."},
+    "clip_img":   {"en": "📷 Image", "ka": "📷 სურათად"},
+    "tip_clip_img": {"en": "Copy the block as an image — paste into ArcGIS Pro layout "
+                          "(or anywhere) as a picture.",
+                     "ka": "ბლოკის კოპირება სურათად — ArcGIS Pro-ს layout-ში (ან სადმე) "
+                          "ჩააფეისთე სურათად."},
+    "clip_img_done": {"en": "Copied as image ({n} rows) — paste into the layout.",
+                      "ka": "დაკოპირდა სურათად ({n} რიგი) — ჩააფეისთე layout-ში."},
     "tip_preview":{"en": "Preview the coordinate table before export.",
                    "ka": "კოორდინატების ცხრილის წინასწარ ნახვა ექსპორტამდე."},
     "tip_batch":  {"en": "Export every point shapefile in the folder at once.",
@@ -350,6 +357,8 @@ class ShpCoordsTool(ToolFrame):
                 self.tr("tip_export")).pack(side="left")
         add_tip(ttk.Button(actions, text=self.tr("clip"), command=self._copy_clipboard),
                 self.tr("tip_clip")).pack(side="left", padx=(4, 0))
+        add_tip(ttk.Button(actions, text=self.tr("clip_img"), command=self._copy_image),
+                self.tr("tip_clip_img")).pack(side="left", padx=(4, 0))
         add_tip(ttk.Button(actions, text=self.tr("preview"), command=self._preview),
                 self.tr("tip_preview")).pack(side="left", padx=(12, 0))
         add_tip(ttk.Button(actions, text=self.tr("batch"), command=self._batch),
@@ -749,7 +758,39 @@ class ShpCoordsTool(ToolFrame):
         if copy_table(fragment, text, widget=self):
             msg = self.tr("clip_done", n=len(rows))
             self.app.log("— " + msg)
-            self.app.log(msg)
+        else:
+            messagebox.showerror(self.tr("err"), self.tr("clip_fail"))
+
+    def _copy_image(self):
+        """ბლოკის კოპირება სურათად (CF_DIB) — ArcGIS Pro layout-ისთვის."""
+        shp = self._shp_map.get(self.shp_var.get())
+        if not shp:
+            messagebox.showwarning("GIS_BOX", self.tr("pick_shp"))
+            return
+        zone = self._resolve_zone(shp)
+        if zone not in (37, 38):
+            messagebox.showwarning("GIS_BOX", self.tr("need_zone"))
+            return
+        try:
+            points = self._read_points(shp, zone)
+        except Exception as e:
+            messagebox.showerror(self.tr("err"), f"{self.tr('load_err')}\n{e}")
+            return
+        if not points:
+            messagebox.showwarning("GIS_BOX", self.tr("no_points"))
+            return
+        template, angle_on, angle_all, vtype = self._current_settings()
+        headers, rows = self._block_rows(points, vtype, angle_on, angle_all)
+        try:
+            from tools.table_image import render_table
+            img = render_table(template, headers, rows)
+        except Exception as e:  # noqa: BLE001
+            messagebox.showerror(self.tr("err"), str(e))
+            return
+        if copy_image(img):
+            msg = self.tr("clip_img_done", n=len(rows))
+            self.app.log("— " + msg)
+            messagebox.showinfo("GIS_BOX", msg)
         else:
             messagebox.showerror(self.tr("err"), self.tr("clip_fail"))
 

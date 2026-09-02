@@ -111,4 +111,13 @@ def render_table(title, headers, rows, scale=6, transparent=True, supersample=2)
         img = img.resize((round(img.width / supersample),
                           round(img.height / supersample)),
                          resample=Image.LANCZOS)
+
+    if transparent and img.mode == "RGBA":
+        # გამჭვირვალე უბნების RGB თეთრი გავხადოთ (ალფა უცვლელი) — რომ ალფის
+        # უგულებელმყოფელ პროგრამაშიც (clipboard/flatten) თეთრი გამოჩნდეს, არა შავი.
+        r, g, b, a = img.split()
+        base = Image.new("RGB", img.size, (255, 255, 255))
+        base.paste(Image.merge("RGB", (r, g, b)), (0, 0), a)
+        img = base.convert("RGBA")
+        img.putalpha(a)
     return img

@@ -41,8 +41,10 @@ def render_table(title, headers, rows, scale=3, transparent=True):
     transparent=True — ფონის გარეშე (RGBA), მხოლოდ ჩარჩოები/ტექსტი."""
     from PIL import Image, ImageDraw
 
-    fs = 17 * scale
-    pad = 8 * scale
+    fs = 16 * scale
+    pad_x = 14 * scale               # ჰორიზონტ. padding — განიერი სვეტები (ქუდი ~3 ხაზზე)
+    pad_y = 5 * scale                # ვერტიკ. padding — კომპაქტური რიგები
+    bw = max(1, round(scale * 0.6))  # თხელი ჩარჩო
     font = _font(fs)
     tmp = ImageDraw.Draw(Image.new("RGB", (10, 10)))
 
@@ -53,15 +55,16 @@ def render_table(title, headers, rows, scale=3, transparent=True):
         w = _text_size(tmp, headers[j], font)[0]
         for row in rows:
             w = max(w, _text_size(tmp, row[j], font)[0])
-        col_w.append(w + 2 * pad)
+        col_w.append(w + 2 * pad_x)
     total_w = sum(col_w)
 
     _, th = _text_size(tmp, "Ag", font)
-    row_h = th + 2 * pad
+    row_h = th + 2 * pad_y           # მონაცემების რიგის სიმაღლე
+    title_lh = th + pad_y            # ქუდის ხაზის (უფრო მჭიდრო) სიმაღლე
 
     # ქუდი — wrap total_w-ზე
-    title_lines = _wrap(tmp, title, font, total_w - 2 * pad) if title else []
-    title_h = (len(title_lines) * row_h) if title_lines else 0
+    title_lines = _wrap(tmp, title, font, total_w - 2 * pad_x) if title else []
+    title_h = (len(title_lines) * title_lh + pad_y) if title_lines else 0
 
     height = title_h + row_h * (1 + len(rows))
     if transparent:
@@ -72,18 +75,17 @@ def render_table(title, headers, rows, scale=3, transparent=True):
     line = "#000000"
 
     def cell(x, y, w, h, text, bold=False):
-        d.rectangle([x, y, x + w, y + h], outline=line, width=max(1, scale))
+        d.rectangle([x, y, x + w, y + h], outline=line, width=bw)
         tw, tht = _text_size(d, text, font)
         d.text((x + (w - tw) / 2, y + (h - tht) / 2 - 1), str(text),
                fill="#000000", font=font)
 
     y = 0
     if title_lines:
-        d.rectangle([0, 0, total_w, title_h], outline=line, width=max(1, scale))
-        ty = (title_h - len(title_lines) * row_h) / 2
+        d.rectangle([0, 0, total_w, title_h], outline=line, width=bw)
         for i, ln in enumerate(title_lines):
             tw, _ = _text_size(d, ln, font)
-            d.text(((total_w - tw) / 2, ty + i * row_h + pad / 2), ln,
+            d.text(((total_w - tw) / 2, pad_y / 2 + i * title_lh), ln,
                    fill="#000000", font=font)
         y = title_h
 

@@ -354,6 +354,12 @@ TEMPLATE_SETS = [
 class GisBoxApp(tk.Tk):
     def __init__(self):
         super().__init__()
+        # კლავიატურიდან ქართულის სწორად შეყვანა: Tk-ის system encoding ხშირად
+        # cp1252-ია (ქართული → „?“); utf-8-ზე გადაყვანა ასწორებს ყველა ველს.
+        try:
+            self.tk.call("encoding", "system", "utf-8")
+        except tk.TclError:
+            pass
         self.title("GIS_BOX")
         self.minsize(860, 560)
         try:                       # ფანჯრის ხატულა (Windows-ზე .ico)

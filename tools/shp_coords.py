@@ -81,6 +81,12 @@ RTR = {
                         "(t→ტ, T→თ, q→ქ, W→ჭ, S→შ, C→ჩ …)."},
     "conv_geo":  {"en": "Georgian:", "ka": "ქართულად:"},
     "tmpl_file": {"en": "📄 File", "ka": "📄 ფაილი"},
+    "tmpl_bad":  {"en": "The text contains “?” (keyboard issue) — not saved. "
+                        "Type in Latin (the converter) or edit the file.",
+                  "ka": "ტექსტში „?“-ია (აკრეფის ხარვეზი) — არ შეინახა. აკრიფე "
+                        "ლათინურით (კონვერტერით) ან ფაილში დაარედაქტირე."},
+    "tmpl_builtin": {"en": "Built-in templates can’t be deleted (edit the file for your own).",
+                     "ka": "ჩაშენებული ქუდები ვერ იშლება (შენს ქუდებს ფაილში მართავ)."},
     "tip_tmpl_file": {"en": "Edit the header templates in a text file (UTF-8) — "
                             "type Georgian in Notepad, then reopen the dropdown.",
                       "ka": "ქუდები ტექსტურ ფაილში დაარედაქტირე (UTF-8) — ქართული "
@@ -193,24 +199,42 @@ class ShpCoordsTool(ToolFrame):
                 if ln.strip() and not ln.startswith("#")]
 
     def _templates(self):
-        """ნაგულისხმევი + გარე ფაილი + შენახული — გაერთიანებული (დუბლ. გარეშე)."""
+        """ნაგულისხმევი (ჩაშენებული) + გარე ფაილი — ერთადერთი წყაროები (დუბლ. გარეშე).
+        ერთადერთი რედაქტირებადი — ფაილი (add/delete და Notepad ერთსა და იმავეს ცვლის)."""
         merged = list(DEFAULT_TEMPLATES)
-        for t in self._file_templates() + list(self.app.get_tool_config(self.tid).get("templates") or []):
+        for t in self._file_templates():
             if t and t not in merged:
                 merged.append(t)
         return merged
 
+    def _write_file_templates(self, lines):
+        """ფაილის გადაწერა (header + user ქუდები, UTF-8)."""
+        try:
+            with open(TEMPLATES_FILE, "w", encoding="utf-8") as f:
+                f.write("# თითო ხაზზე ერთი ტექსტური ქუდი (UTF-8) / one header per line\n")
+                for ln in lines:
+                    f.write(ln + "\n")
+        except OSError as e:
+            messagebox.showerror(self.tr("err"), str(e))
+
+    def _migrate_config_templates(self):
+        """ძველი კონფიგში შენახული ქუდები → ფაილში (უვარგისი „?“-იანები იშლება)."""
+        cfg = self.app.get_tool_config(self.tid)
+        if "templates" not in cfg:
+            return
+        good = [t for t in (cfg.get("templates") or [])
+                if t and "?" not in t and t not in DEFAULT_TEMPLATES]
+        if good:
+            files = self._file_templates()
+            self._write_file_templates(files + [t for t in good if t not in files])
+        cfg.pop("templates", None)
+        self.app.set_tool_config(self.tid, cfg)
+
     def _open_templates_file(self):
         """ქუდების ფაილს ხსნის სისტემურ რედაქტორში (Notepad-ში ქართული იწერება)."""
         if not os.path.exists(TEMPLATES_FILE):
-            try:
-                with open(TEMPLATES_FILE, "w", encoding="utf-8") as f:
-                    f.write("# თითო ხაზზე ერთი ტექსტური ქუდი / one header template per line\n")
-                    for t in DEFAULT_TEMPLATES:
-                        f.write(t + "\n")
-            except OSError as e:
-                messagebox.showerror(self.tr("err"), str(e))
-                return
+            # ფაილში მხოლოდ მომხმარებლის ქუდები (ჩაშენებულები ისედ ჩამონათვალშია)
+            self._write_file_templates(self._file_templates())
         try:
             if sys.platform == "win32":
                 os.startfile(TEMPLATES_FILE)            # noqa: S606
@@ -291,6 +315,7 @@ class ShpCoordsTool(ToolFrame):
                                        postcommand=self._refresh_templates,
                                        font=("Sylfaen", 11))
         self.tmpl_combo.pack(side="left", fill="x", expand=True, padx=(6, 6))
+        self._migrate_config_templates()       # ძველი „????“-ები კონფიგიდან გაქრეს
         self._refresh_templates()
         add_tip(ttk.Button(trow, text=self.tr("tmpl_add"), command=self._add_template),
                 self.tr("tip_tmpl_add")).pack(side="left")
@@ -402,12 +427,13 @@ class ShpCoordsTool(ToolFrame):
         txt = self._ask_text(self.tr("tmpl_add_q"))
         if not txt:
             return
-        tmpls = self._templates()
-        if txt not in tmpls:
-            tmpls.append(txt)
-        cfg = self.app.get_tool_config(self.tid)
-        cfg["templates"] = tmpls
-        self.app.set_tool_config(self.tid, cfg)
+        if "?" in txt:                         # აკრეფის ხარვეზი — არ შევინახოთ
+            messagebox.showwarning("GIS_BOX", self.tr("tmpl_bad"))
+            return
+        files = self._file_templates()
+        if txt not in files and txt not in DEFAULT_TEMPLATES:
+            files.append(txt)
+            self._write_file_templates(files)   # ერთადერთი წყარო — ფაილი
         self._refresh_templates()
         self.tmpl_var.set(txt)
 
@@ -415,16 +441,14 @@ class ShpCoordsTool(ToolFrame):
         cur = self.tmpl_var.get()
         if not cur or cur == self.tr("tmpl_none"):
             return
-        tmpls = self._templates()
-        if cur not in tmpls:
+        files = self._file_templates()
+        if cur not in files:                    # ჩაშენებულს ვერ წავშლით
+            messagebox.showinfo("GIS_BOX", self.tr("tmpl_builtin"))
             return
-        if not messagebox.askyesno("GIS_BOX",
-                                   f"{self.tr('tmpl_del_q')}\n\n{cur}"):
+        if not messagebox.askyesno("GIS_BOX", f"{self.tr('tmpl_del_q')}\n\n{cur}"):
             return
-        tmpls.remove(cur)
-        cfg = self.app.get_tool_config(self.tid)
-        cfg["templates"] = tmpls
-        self.app.set_tool_config(self.tid, cfg)
+        files.remove(cur)
+        self._write_file_templates(files)
         self._refresh_templates()
         self.tmpl_var.set(self.tr("tmpl_none"))
 

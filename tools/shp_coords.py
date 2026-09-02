@@ -18,7 +18,7 @@ import re
 import glob
 
 import tkinter as tk
-from tkinter import ttk, filedialog, messagebox, simpledialog
+from tkinter import ttk, filedialog, messagebox
 
 from tools.base import ToolFrame
 from tools.tooltip import add_tip
@@ -31,6 +31,7 @@ AUTO_PATTERNS = ("gas_pipe_crossing", "gas_pipe_protzone_crossing", "crossing")
 DEFAULT_TEMPLATES = [
     "nakveTis da dacvis zonis sazRvris kveTis koordinatebi",
     "ნაკვეთის და დაცვის ზონის საზღვრის კვეთის კოორდინატები",
+    "ნაკვეთის საზღვრის და დაცვის მეორე ზონის კვეთის კოორდინატები",
 ]
 
 # ---- განლაგების მუდმივები (მაგალითის მიხედვით) ----------------------------
@@ -65,6 +66,8 @@ RTR = {
     "tmpl_none": {"en": "(none)", "ka": "(არცერთი)"},
     "tmpl_add":  {"en": "➕ Add…", "ka": "➕ დამატება…"},
     "tmpl_add_q":{"en": "New header template text:", "ka": "ახალი ქუდის ტექსტი:"},
+    "dlg_ok":    {"en": "OK", "ka": "დიახ"},
+    "dlg_cancel":{"en": "Cancel", "ka": "გაუქმება"},
     "tmpl_del":  {"en": "🗑 Delete", "ka": "🗑 წაშლა"},
     "tmpl_del_q":{"en": "Delete this header template?",
                   "ka": "წავშალო ეს ტექსტური ქუდი?"},
@@ -287,8 +290,38 @@ class ShpCoordsTool(ToolFrame):
         if self.tmpl_var.get() not in vals:
             self.tmpl_var.set(vals[0])
 
+    def _ask_text(self, prompt, initial=""):
+        """ტექსტის შეყვანის მოდალი — ჩვენი ttk.Entry-ით (ქართული სწორად ჩანს,
+        simpledialog-ის ??? პრობლემის გარეშე). Sylfaen ფონტი ქართულს უჭერს მხარს."""
+        dlg = tk.Toplevel(self)
+        dlg.title("GIS_BOX")
+        dlg.transient(self.winfo_toplevel())
+        dlg.resizable(False, False)
+        frm = ttk.Frame(dlg, padding=12)
+        frm.pack(fill="both", expand=True)
+        ttk.Label(frm, text=prompt, wraplength=460).pack(anchor="w")
+        var = tk.StringVar(value=initial)
+        ent = ttk.Entry(frm, textvariable=var, width=60, font=("Sylfaen", 11))
+        ent.pack(fill="x", pady=(6, 10))
+        ent.focus_set()
+        out = {"v": None}
+
+        def ok(_e=None):
+            out["v"] = var.get().strip()
+            dlg.destroy()
+
+        btns = ttk.Frame(frm)
+        btns.pack(anchor="e")
+        ttk.Button(btns, text=self.tr("dlg_ok"), command=ok).pack(side="left")
+        ttk.Button(btns, text=self.tr("dlg_cancel"), command=dlg.destroy).pack(side="left", padx=(6, 0))
+        ent.bind("<Return>", ok)
+        dlg.bind("<Escape>", lambda e: dlg.destroy())
+        dlg.grab_set()
+        self.wait_window(dlg)
+        return out["v"]
+
     def _add_template(self):
-        txt = simpledialog.askstring("GIS_BOX", self.tr("tmpl_add_q"), parent=self)
+        txt = self._ask_text(self.tr("tmpl_add_q"))
         if not txt:
             return
         tmpls = self._templates()

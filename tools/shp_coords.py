@@ -171,13 +171,16 @@ RTR = {
                    "ka": "დაკოპირდა ბუფერში ({n} რიგი)."},
     "clip_fail":  {"en": "Could not copy to clipboard.",
                    "ka": "ბუფერში კოპირება ვერ მოხერხდა."},
-    "clip_img":   {"en": "📷 Image", "ka": "📷 სურათად"},
-    "tip_clip_img": {"en": "Copy the block as an image — paste into ArcGIS Pro layout "
-                          "(or anywhere) as a picture.",
-                     "ka": "ბლოკის კოპირება სურათად — ArcGIS Pro-ს layout-ში (ან სადმე) "
-                          "ჩააფეისთე სურათად."},
-    "clip_img_done": {"en": "Copied as image ({n} rows) — paste into the layout.",
-                      "ka": "დაკოპირდა სურათად ({n} რიგი) — ჩააფეისთე layout-ში."},
+    "clip_img":   {"en": "📷 PNG", "ka": "📷 PNG"},
+    "tip_clip_img": {"en": "Save the block as a transparent PNG (no background) — in "
+                          "ArcGIS Pro use Insert → Picture (no stretching).",
+                     "ka": "ბლოკის შენახვა გამჭვირვალე PNG-ად (ფონის გარეშე) — ArcGIS "
+                          "Pro-ში Insert → Picture-ით ჩასვი (არ იწელება)."},
+    "img_save_title": {"en": "Save table as PNG", "ka": "ცხრილის შენახვა PNG-ად"},
+    "img_done":   {"en": "Saved: {path}\n\nIn ArcGIS Pro: Insert → Picture → choose this "
+                        "file (transparent, no stretch).",
+                   "ka": "შენახულია: {path}\n\nArcGIS Pro-ში: Insert → Picture → აირჩიე ეს "
+                        "ფაილი (გამჭვირვალე, არ იწელება)."},
     "tip_preview":{"en": "Preview the coordinate table before export.",
                    "ka": "კოორდინატების ცხრილის წინასწარ ნახვა ექსპორტამდე."},
     "tip_batch":  {"en": "Export every point shapefile in the folder at once.",
@@ -762,7 +765,8 @@ class ShpCoordsTool(ToolFrame):
             messagebox.showerror(self.tr("err"), self.tr("clip_fail"))
 
     def _copy_image(self):
-        """ბლოკის კოპირება სურათად (CF_DIB) — ArcGIS Pro layout-ისთვის."""
+        """ბლოკის შენახვა გამჭვირვალე PNG-ად — ArcGIS Pro-ში Insert → Picture-ით
+        ჩაისმება (ფონის გარეშე, პროპორცია არ იშლება). ასევე ცდილობს ბუფერშიც."""
         shp = self._shp_map.get(self.shp_var.get())
         if not shp:
             messagebox.showwarning("GIS_BOX", self.tr("pick_shp"))
@@ -779,20 +783,25 @@ class ShpCoordsTool(ToolFrame):
         if not points:
             messagebox.showwarning("GIS_BOX", self.tr("no_points"))
             return
+        base = os.path.splitext(os.path.basename(shp))[0]
+        path = filedialog.asksaveasfilename(
+            title=self.tr("img_save_title"), defaultextension=".png",
+            initialfile=base + "_table.png", filetypes=[("PNG", "*.png")])
+        if not path:
+            return
         template, angle_on, angle_all, vtype = self._current_settings()
         headers, rows = self._block_rows(points, vtype, angle_on, angle_all)
         try:
             from tools.table_image import render_table
-            img = render_table(template, headers, rows)
+            img = render_table(template, headers, rows, transparent=True)
+            img.save(path)
         except Exception as e:  # noqa: BLE001
             messagebox.showerror(self.tr("err"), str(e))
             return
-        if copy_image(img):
-            msg = self.tr("clip_img_done", n=len(rows))
-            self.app.log("— " + msg)
-            messagebox.showinfo("GIS_BOX", msg)
-        else:
-            messagebox.showerror(self.tr("err"), self.tr("clip_fail"))
+        copy_image(img)                    # ბონუსად — ბუფერშიც (ფონით)
+        msg = self.tr("img_done", path=path)
+        self.app.log("— " + msg)
+        messagebox.showinfo("GIS_BOX", msg)
 
     # ---- Batch: საქაღალდის ყველა წერტილოვანი shapefile ერთბაშად ----
     def _batch(self):

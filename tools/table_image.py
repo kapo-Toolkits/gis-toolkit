@@ -36,8 +36,9 @@ def _wrap(draw, text, font, max_w):
     return lines
 
 
-def render_table(title, headers, rows, scale=2):
-    """ბლოკის სურათი. title — ქუდი ("" თუ არაა); headers/rows — ცხრილი."""
+def render_table(title, headers, rows, scale=3, transparent=True):
+    """ბლოკის სურათი. title — ქუდი ("" თუ არაა); headers/rows — ცხრილი.
+    transparent=True — ფონის გარეშე (RGBA), მხოლოდ ჩარჩოები/ტექსტი."""
     from PIL import Image, ImageDraw
 
     fs = 17 * scale
@@ -63,7 +64,10 @@ def render_table(title, headers, rows, scale=2):
     title_h = (len(title_lines) * row_h) if title_lines else 0
 
     height = title_h + row_h * (1 + len(rows))
-    img = Image.new("RGB", (total_w + 1, height + 1), "white")
+    if transparent:
+        img = Image.new("RGBA", (total_w + 1, height + 1), (255, 255, 255, 0))
+    else:
+        img = Image.new("RGB", (total_w + 1, height + 1), "white")
     d = ImageDraw.Draw(img)
     line = "#000000"
 

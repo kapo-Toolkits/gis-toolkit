@@ -15,6 +15,7 @@
 
 import os
 import re
+import sys
 import glob
 
 import tkinter as tk
@@ -33,6 +34,11 @@ DEFAULT_TEMPLATES = [
     "ნაკვეთის და დაცვის ზონის საზღვრის კვეთის კოორდინატები",
     "ნაკვეთის საზღვრის და დაცვის მეორე ზონის კვეთის კოორდინატები",
 ]
+
+# გარე ტექსტური ფაილი — თითო ხაზზე ერთი ქუდი (UTF-8). მომხმარებელი Notepad-ში
+# ამატებს ქართულ ქუდებს (სადაც აკრეფა ნორმალურად მუშაობს) და აქ ჩნდება.
+_APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+TEMPLATES_FILE = os.path.join(_APP_DIR, "shp_coords_templates.txt")
 
 # ---- განლაგების მუდმივები (მაგალითის მიხედვით) ----------------------------
 # ნედლი ბლოკი A:D. ასლი იწყება G-დან — 2 ცარიელი სვეტი (E, F) დაშორებით,
@@ -68,6 +74,11 @@ RTR = {
     "tmpl_add_q":{"en": "New header template text:", "ka": "ახალი ქუდის ტექსტი:"},
     "dlg_ok":    {"en": "OK", "ka": "დიახ"},
     "dlg_cancel":{"en": "Cancel", "ka": "გაუქმება"},
+    "tmpl_file": {"en": "📄 File", "ka": "📄 ფაილი"},
+    "tip_tmpl_file": {"en": "Edit the header templates in a text file (UTF-8) — "
+                            "type Georgian in Notepad, then reopen the dropdown.",
+                      "ka": "ქუდები ტექსტურ ფაილში დაარედაქტირე (UTF-8) — ქართული "
+                            "Notepad-ში აკრიფე, მერე ჩამოსაშლელი თავიდან გახსენი."},
     "tmpl_del":  {"en": "🗑 Delete", "ka": "🗑 წაშლა"},
     "tmpl_del_q":{"en": "Delete this header template?",
                   "ka": "წავშალო ეს ტექსტური ქუდი?"},
@@ -155,12 +166,45 @@ class ShpCoordsTool(ToolFrame):
         return self.app.tool_state.setdefault(self.tid, {})
 
     # ---- შენახული ტექსტური შაბლონები ----
+    @staticmethod
+    def _file_templates():
+        """გარე ფაილიდან ქუდები (UTF-8, თითო ხაზზე ერთი)."""
+        try:
+            with open(TEMPLATES_FILE, "r", encoding="utf-8") as f:
+                return [ln.strip() for ln in f if ln.strip() and not ln.startswith("#")]
+        except OSError:
+            return []
+
     def _templates(self):
-        saved = self.app.get_tool_config(self.tid)
-        tmpls = saved.get("templates")
-        if not tmpls:
-            tmpls = list(DEFAULT_TEMPLATES)
-        return tmpls
+        """ნაგულისხმევი + გარე ფაილი + შენახული — გაერთიანებული (დუბლ. გარეშე)."""
+        merged = list(DEFAULT_TEMPLATES)
+        for t in self._file_templates() + list(self.app.get_tool_config(self.tid).get("templates") or []):
+            if t and t not in merged:
+                merged.append(t)
+        return merged
+
+    def _open_templates_file(self):
+        """ქუდების ფაილს ხსნის სისტემურ რედაქტორში (Notepad-ში ქართული იწერება)."""
+        if not os.path.exists(TEMPLATES_FILE):
+            try:
+                with open(TEMPLATES_FILE, "w", encoding="utf-8") as f:
+                    f.write("# თითო ხაზზე ერთი ტექსტური ქუდი / one header template per line\n")
+                    for t in DEFAULT_TEMPLATES:
+                        f.write(t + "\n")
+            except OSError as e:
+                messagebox.showerror(self.tr("err"), str(e))
+                return
+        try:
+            if sys.platform == "win32":
+                os.startfile(TEMPLATES_FILE)            # noqa: S606
+            elif sys.platform == "darwin":
+                __import__("subprocess").run(["open", TEMPLATES_FILE])
+            else:
+                __import__("subprocess").run(["xdg-open", TEMPLATES_FILE])
+        except Exception as e:  # noqa: BLE001
+            messagebox.showerror(self.tr("err"), str(e))
+            return
+        self._refresh_templates()
 
     def build(self):
         pal = self.app.palette
@@ -223,13 +267,17 @@ class ShpCoordsTool(ToolFrame):
         trow.grid(row=8, column=0, columnspan=3, sticky="ew", pady=(0, 6))
         ttk.Label(trow, text=self.tr("tmpl")).pack(side="left")
         self.tmpl_var = tk.StringVar(value=st.get("template", self.tr("tmpl_none")))
-        self.tmpl_combo = ttk.Combobox(trow, textvariable=self.tmpl_var, width=48)
+        # postcommand — ჩამოსაშლელის გახსნისას ფაილიდან ხელახლა იკითხება
+        self.tmpl_combo = ttk.Combobox(trow, textvariable=self.tmpl_var, width=48,
+                                       postcommand=self._refresh_templates)
         self.tmpl_combo.pack(side="left", fill="x", expand=True, padx=(6, 6))
         self._refresh_templates()
         add_tip(ttk.Button(trow, text=self.tr("tmpl_add"), command=self._add_template),
                 self.tr("tip_tmpl_add")).pack(side="left")
         add_tip(ttk.Button(trow, text=self.tr("tmpl_del"), command=self._delete_template),
                 self.tr("tip_tmpl_del")).pack(side="left", padx=(4, 0))
+        add_tip(ttk.Button(trow, text=self.tr("tmpl_file"), command=self._open_templates_file),
+                self.tr("tip_tmpl_file")).pack(side="left", padx=(4, 0))
 
         # გადაკვეთის კუთხე
         arow = ttk.Frame(self)

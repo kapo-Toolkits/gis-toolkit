@@ -9,6 +9,9 @@ config.txt
 # --- მომხმარებლის პარამეტრები (source_dir შეიცავს ლოკალურ გზას) ---
 gis_box_settings.json
 
+# --- Shp → კოორდინატები: მომხმარებლის ტექსტური ქუდები (ლოკალური) ---
+shp_coords_templates.txt
+
 # --- GDB → PostGIS ინკრემენტული სინქრონის watermark-ები (ლოკალური) ---
 gdb2postgis_sync_state.json
 

@@ -720,6 +720,7 @@ class ShpCoordsTool(ToolFrame):
         def esc(v):
             return (str(v).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"))
 
+        # უბრალო ცხრილი — ჩარჩოები + ცენტრირება, ფონის/ფერის გარეშე (როგორც არის)
         bd = "border:1px solid #000;"
         ce = "text-align:center;vertical-align:middle;padding:2px 10px;"
         html = ['<table style="border-collapse:collapse;'

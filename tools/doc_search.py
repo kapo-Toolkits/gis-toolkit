@@ -27,6 +27,7 @@ from tkinter import ttk, filedialog, messagebox
 
 from tools.base import ToolFrame
 from tools.tooltip import add_tip
+from tools.translit import lat_to_geo
 from tools.doc_search_core import (
     MODE_ALL, MODE_ANY, MODE_PHRASE,
     index_folder, index_stats, search,
@@ -58,6 +59,18 @@ DTR = {
 
     "lbl_query":  {"en": "Search:", "ka": "ძებნა:"},
     "btn_search": {"en": "Search", "ka": "ძებნა"},
+    "lat2geo":    {"en": "Type Latin → Georgian",
+                   "ka": "ლათინურით ვწერ (→ ქართული)"},
+    "preview_lbl": {"en": "Will search:", "ka": "მოიძებნება:"},
+    "tip_lat2geo": {"en": "Georgian keyboard input shows “????” in this app. "
+                          "Turn this on and type the query in Latin — it is "
+                          "converted to Georgian below (nakveTi → ნაკვეთი). "
+                          "Turn it off for English/Latin searches or to paste "
+                          "Georgian directly.",
+                    "ka": "ამ პროგრამაში ქართული კლავიატურა „????“-ს წერს. "
+                          "ჩართე და აკრიფე მოთხოვნა ლათინურით — ქვემოთ ქართულად "
+                          "გადაკეთდება (nakveTi → ნაკვეთი). გამორთე ინგლისური/"
+                          "ლათინური ძებნისთვის ან ქართულის პირდაპირ ჩასასმელად."},
     "mode_phrase": {"en": "Phrase", "ka": "ფრაზა"},
     "mode_all":   {"en": "All words", "ka": "ყველა სიტყვა"},
     "mode_any":   {"en": "Any word", "ka": "რომელიმე"},
@@ -217,6 +230,23 @@ class DocSearchTool(ToolFrame):
         add_tip(ttk.Button(qrow, text=self.tr("btn_search"), command=self._search),
                 self.tr("tip_search")).pack(side="left")
 
+        # --- ლათინურით შეყვანა → ქართული (კლავიატურის „????“-ის შემოვლა) ---
+        # ქართული კლავიატურა ამ პროგრამის ველებში „?“-ებს წერს (Tk-ის Windows
+        # WM_CHAR-ის ხარვეზი). ჩართვისას ლათინურ აკრეფას Python-ის მხარეს
+        # ვაქცევთ ქართულად — ეს გვერდს უვლის დაზიანებულ კლავიატურის გზას.
+        crow = ttk.Frame(self)
+        crow.pack(fill="x", pady=(4, 0))
+        self.lat2geo_var = tk.BooleanVar(value=st.get("lat2geo", True))
+        add_tip(ttk.Checkbutton(crow, text=self.tr("lat2geo"),
+                                variable=self.lat2geo_var,
+                                command=self._update_preview),
+                self.tr("tip_lat2geo")).pack(side="left")
+        self.preview_lbl = ttk.Label(crow, text="", foreground=pal["muted"],
+                                     font=("Sylfaen", 11))
+        self.preview_lbl.pack(side="left", padx=(14, 0))
+        self.query_var.trace_add("write", lambda *_a: self._update_preview())
+        self._update_preview()
+
         mrow = ttk.Frame(self)
         mrow.pack(fill="x", pady=(6, 8))
         self.mode_var = tk.StringVar(value=st.get("mode", MODE_PHRASE))
@@ -287,6 +317,25 @@ class DocSearchTool(ToolFrame):
         st["recursive"] = self.recursive_var.get()
         st["query"] = self.query_var.get()
         st["mode"] = self.mode_var.get()
+        st["lat2geo"] = self.lat2geo_var.get()
+
+    # ---- ლათინური→ქართული საძიებო ტექსტი ----
+    def _effective_query(self):
+        """ფაქტობრივი მოთხოვნა: ჩართული „ლათ→ქარ“-ისას ლათინურ აკრეფას
+        ქართულად ვაქცევთ (Python-ის მხარეს, კლავიატურის ხარვეზის გვერდის ავლით)."""
+        raw = self.query_var.get().strip()
+        return lat_to_geo(raw) if self.lat2geo_var.get() else raw
+
+    def _update_preview(self):
+        """ცოცხალი გადახედვა — რა მოიძებნება (ქართული Tk-ში სწორად ჩანს)."""
+        if not hasattr(self, "preview_lbl") or not self.preview_lbl.winfo_exists():
+            return
+        if self.lat2geo_var.get():
+            q = self._effective_query()
+            self.preview_lbl.configure(
+                text=(self.tr("preview_lbl") + " " + q) if q else "")
+        else:
+            self.preview_lbl.configure(text="")
 
     # ---- საქაღალდე ----
     def _pick(self):
@@ -394,7 +443,7 @@ class DocSearchTool(ToolFrame):
 
     # ---- ძებნა ----
     def _search(self):
-        query = self.query_var.get().strip()
+        query = self._effective_query()
         if not query:
             messagebox.showwarning("GIS_BOX", self.tr("warn_query"))
             return
